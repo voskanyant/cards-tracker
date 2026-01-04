@@ -14,8 +14,8 @@ from django.views.decorators.http import require_POST
 from django.utils import timezone
 from django.shortcuts import get_object_or_404, redirect
 from django.urls import reverse
-from .forms import CardForm, ClientForm, TransactionForm
-from .models import Card, Client, Transaction, Withdrawal
+from .forms import CardForm, CardGroupForm, ClientForm, TransactionForm
+from .models import Card, CardGroup, Client, Transaction, Withdrawal
 
 DATE_DISPLAY_FORMAT = "%d/%m/%Y"
 DATE_PARSE_FORMATS = ["%d/%m/%Y", "%Y-%m-%d"]
@@ -92,6 +92,16 @@ def _card_display(card: Card) -> str:
     if bank:
         label = f"{bank} {label}"
     return label.strip()
+
+
+def _bank_name_list():
+    return list(
+        Card.objects.exclude(bank__isnull=True)
+        .exclude(bank="")
+        .order_by("bank")
+        .values_list("bank", flat=True)
+        .distinct()
+    )
 
 
 def _parse_user_date(raw: str):
@@ -252,16 +262,25 @@ def withdraw_today_save(request):
 
 @login_required
 def cards_list(request):
-    cards = Card.objects.all().order_by("name")
+    cards = Card.objects.select_related("group").all().order_by("name")
+    groups = CardGroup.objects.order_by("name")
+    banks = _bank_name_list()
 
     start_raw = (request.GET.get("start") or "").strip()
     end_raw = (request.GET.get("end") or "").strip()
+    bank_filter = (request.GET.get("bank") or "").strip()
+    group_filter = (request.GET.get("group") or "").strip()
     start_date = _parse_user_date(start_raw)
     end_date = _parse_user_date(end_raw)
     if start_date:
         start_raw = _format_user_date(start_date)
     if end_date:
         end_raw = _format_user_date(end_date)
+
+    if bank_filter:
+        cards = cards.filter(bank__icontains=bank_filter)
+    if group_filter:
+        cards = cards.filter(group__name__icontains=group_filter)
 
     tx_filter = {}
     wd_filter = {}
@@ -318,7 +337,11 @@ def cards_list(request):
             "form": form,
             "start": start_raw,
             "end": end_raw,
+            "bank_filter": bank_filter,
+            "group_filter": group_filter,
             "overall": overall,
+            "groups": groups,
+            "banks": banks,
         },
     )
 
@@ -342,14 +365,38 @@ def transactions_list(request):
     for card in cards:
         card.display_label = _card_display(card)
 
+    clear_filters = "clear" in request.GET
+    if clear_filters:
+        request.session.pop("tx_start", None)
+        request.session.pop("tx_end", None)
+
     start_raw = (request.GET.get("start") or "").strip()
     end_raw = (request.GET.get("end") or "").strip()
     start_date = _parse_user_date(start_raw)
     end_date = _parse_user_date(end_raw)
-    if start_date:
-        start_raw = _format_user_date(start_date)
-    if end_date:
-        end_raw = _format_user_date(end_date)
+    if start_raw:
+        if start_date:
+            start_raw = _format_user_date(start_date)
+            request.session["tx_start"] = start_raw
+        else:
+            request.session.pop("tx_start", None)
+    elif not clear_filters:
+        stored = request.session.get("tx_start")
+        if stored:
+            start_raw = stored
+            start_date = _parse_user_date(stored)
+
+    if end_raw:
+        if end_date:
+            end_raw = _format_user_date(end_date)
+            request.session["tx_end"] = end_raw
+        else:
+            request.session.pop("tx_end", None)
+    elif not clear_filters:
+        stored_end = request.session.get("tx_end")
+        if stored_end:
+            end_raw = stored_end
+            end_date = _parse_user_date(stored_end)
 
     if start_date:
         txs = txs.filter(timestamp__date__gte=start_date)
@@ -383,20 +430,32 @@ def transactions_list(request):
 @login_required
 def card_add(request):
     form = CardForm(request.POST or None)
+    groups = CardGroup.objects.order_by("name")
+    banks = _bank_name_list()
     if request.method == "POST" and form.is_valid():
         form.save()
         return redirect("cards_list")
-    return render(request, "core/card_form.html", {"form": form, "title": "Add Card"})
+    return render(
+        request,
+        "core/card_form.html",
+        {"form": form, "title": "Add Card", "groups": groups, "banks": banks},
+    )
 
 
 @login_required
 def card_edit(request, pk: int):
     card = get_object_or_404(Card, pk=pk)
     form = CardForm(request.POST or None, instance=card)
+    groups = CardGroup.objects.order_by("name")
+    banks = _bank_name_list()
     if request.method == "POST" and form.is_valid():
         form.save()
         return redirect("cards_list")
-    return render(request, "core/card_form.html", {"form": form, "title": "Edit Card"})
+    return render(
+        request,
+        "core/card_form.html",
+        {"form": form, "title": "Edit Card", "groups": groups, "banks": banks},
+    )
 
 
 @login_required
@@ -451,6 +510,39 @@ def client_delete(request, pk: int):
     except ProtectedError:
         messages.error(request, "Cannot delete client with existing transactions.")
     return redirect(next_url)
+
+
+@login_required
+@require_POST
+def group_create(request):
+    name = (request.POST.get("name") or "").strip()
+    if not name:
+        return JsonResponse({"ok": False, "error": "Name is required"}, status=400)
+    group, created = CardGroup.objects.get_or_create(name=name)
+    return JsonResponse({"ok": True, "id": group.id, "name": group.name, "created": created})
+
+
+@login_required
+@require_POST
+def group_rename(request, pk: int):
+    group = get_object_or_404(CardGroup, pk=pk)
+    name = (request.POST.get("name") or "").strip()
+    if not name:
+        return JsonResponse({"ok": False, "error": "Name is required"}, status=400)
+    if CardGroup.objects.exclude(pk=group.pk).filter(name=name).exists():
+        return JsonResponse({"ok": False, "error": "Group with this name already exists"}, status=400)
+    group.name = name
+    group.save()
+    return JsonResponse({"ok": True, "id": group.id, "name": group.name})
+
+
+@login_required
+@require_POST
+def group_delete(request, pk: int):
+    group = get_object_or_404(CardGroup, pk=pk)
+    group.cards.update(group=None)
+    group.delete()
+    return JsonResponse({"ok": True})
 
 
 @login_required
@@ -552,14 +644,38 @@ def card_history(request, pk: int):
     return render(request, "core/card_history.html", context)
 @login_required
 def payments_summary(request):
+    clear_filters = "clear" in request.GET
+    if clear_filters:
+        request.session.pop("pay_start", None)
+        request.session.pop("pay_end", None)
+
     start_raw = (request.GET.get("start") or "").strip()
     end_raw = (request.GET.get("end") or "").strip()
     start_date = _parse_user_date(start_raw)
     end_date = _parse_user_date(end_raw)
-    if start_date:
-        start_raw = _format_user_date(start_date)
-    if end_date:
-        end_raw = _format_user_date(end_date)
+    if start_raw:
+        if start_date:
+            start_raw = _format_user_date(start_date)
+            request.session["pay_start"] = start_raw
+        else:
+            request.session.pop("pay_start", None)
+    elif not clear_filters:
+        stored_start = request.session.get("pay_start")
+        if stored_start:
+            start_raw = stored_start
+            start_date = _parse_user_date(stored_start)
+
+    if end_raw:
+        if end_date:
+            end_raw = _format_user_date(end_date)
+            request.session["pay_end"] = end_raw
+        else:
+            request.session.pop("pay_end", None)
+    elif not clear_filters:
+        stored_end = request.session.get("pay_end")
+        if stored_end:
+            end_raw = stored_end
+            end_date = _parse_user_date(stored_end)
 
     txs = Transaction.objects.select_related("client").order_by("-timestamp")
     if start_date:
@@ -590,3 +706,32 @@ def payments_summary(request):
         "core/payments_summary.html",
         {"rows": rows, "start": start_raw, "end": end_raw},
     )
+@login_required
+def groups_list(request):
+    groups = CardGroup.objects.order_by("name")
+    form = CardGroupForm(request.POST or None)
+    if request.method == "POST" and form.is_valid():
+        form.save()
+        return redirect("groups_list")
+    return render(request, "core/groups_list.html", {"groups": groups, "form": form})
+
+
+@login_required
+def group_edit(request, pk: int):
+    group = get_object_or_404(CardGroup, pk=pk)
+    form = CardGroupForm(request.POST or None, instance=group)
+    if request.method == "POST" and form.is_valid():
+        form.save()
+        return redirect("groups_list")
+    return render(request, "core/group_form.html", {"form": form, "title": "Edit Group"})
+
+
+@login_required
+@require_POST
+def group_delete(request, pk: int):
+    group = get_object_or_404(CardGroup, pk=pk)
+    next_url = request.POST.get("next") or request.META.get("HTTP_REFERER") or reverse("groups_list")
+    if not next_url or not next_url.startswith("/"):
+        next_url = reverse("groups_list")
+    group.delete()
+    return redirect(next_url)

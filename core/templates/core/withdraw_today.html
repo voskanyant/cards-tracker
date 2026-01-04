@@ -76,9 +76,19 @@
 			  <td class="num col-narrow"><b class="remaining-value">{{ r.remaining|spaced_number }}</b></td>
 
 			  <td>
-				<input type="text" class="note note-input"
-					value="{% if r.withdrawal %}{{ r.withdrawal.note|default:'' }}{% endif %}">
-
+				<div class="note-cell {% if r.withdrawal and r.withdrawal.note %}has-note{% endif %}">
+				  <div class="note-preview">
+					{% if r.withdrawal and r.withdrawal.note %}
+					  {{ r.withdrawal.note }}
+					{% else %}
+					  No note
+					{% endif %}
+				  </div>
+				  <button type="button" class="note-trigger">
+					{% if r.withdrawal and r.withdrawal.note %}Edit note{% else %}Add note{% endif %}
+				  </button>
+				  <input type="hidden" class="note note-input" value="{% if r.withdrawal %}{{ r.withdrawal.note|default:'' }}{% endif %}">
+				</div>
 			  </td>
 			</tr>
 
@@ -104,6 +114,20 @@
       Tip: edit withdrawals inline and they autosave instantly.
     </p>
 </section>
+
+<div class="note-modal" id="note-modal">
+  <div class="note-modal-content">
+    <h3>Card Note</h3>
+    <textarea id="note-modal-text" rows="5" placeholder="Type note..."></textarea>
+    <div class="note-modal-actions">
+      <button type="button" data-note-action="delete" class="danger">Delete</button>
+      <div class="note-modal-actions-right">
+        <button type="button" data-note-action="cancel">Cancel</button>
+        <button type="button" data-note-action="save" class="primary">Save</button>
+      </div>
+    </div>
+  </div>
+</div>
 
 	<script>
 	  // --- CSRF ---
@@ -248,9 +272,6 @@
 		}
 	  }
 
-	  // Debounce notes only
-	  let noteTimer = null;
-
 	  document.querySelectorAll("tr[data-card-id]").forEach(row => {
 		row.addEventListener("change", (e) => {
 		  refreshTotals();
@@ -258,15 +279,84 @@
 		});
 
 		row.addEventListener("input", (e) => {
-		  if (e.target.classList.contains("note")) {
-			clearTimeout(noteTimer);
-			noteTimer = setTimeout(() => autosave(row), 400);
-			return;
-		  }
 		  if (e.target.classList.contains("withdrawn") || e.target.classList.contains("commission")) {
 			refreshTotals();
 		  }
 		});
+	  });
+
+	  const noteModal = document.getElementById("note-modal");
+	  const noteTextarea = document.getElementById("note-modal-text");
+	  const noteSaveBtn = noteModal?.querySelector("[data-note-action='save']");
+	  const noteDeleteBtn = noteModal?.querySelector("[data-note-action='delete']");
+	  const noteCancelBtn = noteModal?.querySelector("[data-note-action='cancel']");
+	  let activeNoteRow = null;
+
+	  function closeNoteModal() {
+		noteModal?.classList.remove("is-open");
+		activeNoteRow = null;
+	  }
+
+	  function openNoteModal(row) {
+		if (!noteModal || !noteTextarea) return;
+		activeNoteRow = row;
+		const hidden = row.querySelector(".note");
+		noteTextarea.value = hidden?.value || "";
+		noteModal.classList.add("is-open");
+		noteTextarea.focus();
+	  }
+
+	  function updateNoteDisplay(row, value) {
+		const hidden = row.querySelector(".note");
+		if (hidden) {
+		  hidden.value = value;
+		}
+		const cell = row.querySelector(".note-cell");
+		if (!cell) return;
+		const preview = cell.querySelector(".note-preview");
+		if (preview) {
+		  preview.textContent = value ? value : "No note";
+		}
+		const trigger = cell.querySelector(".note-trigger");
+		if (trigger) {
+		  trigger.textContent = value ? "Edit note" : "Add note";
+		}
+		cell.classList.toggle("has-note", Boolean(value));
+	  }
+
+	  document.querySelectorAll(".note-trigger").forEach(btn => {
+		const row = btn.closest("tr[data-card-id]");
+		if (!row) return;
+		const hidden = row.querySelector(".note");
+		updateNoteDisplay(row, hidden?.value || "");
+		btn.addEventListener("click", () => openNoteModal(row));
+	  });
+
+	  noteSaveBtn?.addEventListener("click", () => {
+		if (!activeNoteRow || !noteTextarea) return;
+		const value = noteTextarea.value.trim();
+		updateNoteDisplay(activeNoteRow, value);
+		closeNoteModal();
+		autosave(activeNoteRow);
+	  });
+
+	  noteDeleteBtn?.addEventListener("click", () => {
+		if (!activeNoteRow) return;
+		updateNoteDisplay(activeNoteRow, "");
+		closeNoteModal();
+		autosave(activeNoteRow);
+	  });
+
+	  noteCancelBtn?.addEventListener("click", () => closeNoteModal());
+	  noteModal?.addEventListener("click", (e) => {
+		if (e.target === noteModal) {
+		  closeNoteModal();
+		}
+	  });
+	  document.addEventListener("keydown", (e) => {
+		if (e.key === "Escape" && noteModal?.classList.contains("is-open")) {
+		  closeNoteModal();
+		}
 	  });
 
 	  refreshTotals();

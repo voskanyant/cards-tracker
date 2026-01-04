@@ -156,6 +156,91 @@
       opacity: 1;
       margin-top: 6px;
     }
+    .note-cell {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+    .note-preview {
+      font-size: 0.85rem;
+      color: var(--muted);
+      min-height: 20px;
+      white-space: pre-wrap;
+      border: 1px dashed transparent;
+      padding: 4px 6px;
+      border-radius: 8px;
+      background: #f8fafc;
+    }
+    .note-cell.has-note .note-preview {
+      color: var(--text);
+      border-color: var(--border);
+      background: #fff;
+    }
+    .note-trigger {
+      border: none;
+      background: rgba(0,0,0,0.05);
+      border-radius: 999px;
+      font-size: 0.8rem;
+      padding: 4px 10px;
+      align-self: flex-start;
+      cursor: pointer;
+      color: var(--primary);
+    }
+    .note-modal {
+      position: fixed;
+      inset: 0;
+      background: rgba(15, 23, 42, 0.5);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      z-index: 80;
+    }
+    .note-modal.is-open {
+      display: flex;
+    }
+    .note-modal-content {
+      background: #fff;
+      border-radius: var(--radius);
+      padding: 20px;
+      width: min(420px, 90vw);
+      box-shadow: 0 25px 60px rgba(15, 23, 42, 0.25);
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+    .note-modal-content textarea {
+      width: 100%;
+      border-radius: 12px;
+      border: 1px solid var(--border);
+      padding: 10px 12px;
+      font: inherit;
+      min-height: 140px;
+    }
+    .note-modal-actions {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 12px;
+    }
+    .note-modal-actions button {
+      border: none;
+      border-radius: 999px;
+      padding: 8px 16px;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    .note-modal-actions .primary {
+      background: var(--primary);
+      color: #fff;
+    }
+    .note-modal-actions .danger {
+      background: #fee2e2;
+      color: #b91c1c;
+    }
+    .note-modal-actions-right {
+      display: flex;
+      gap: 8px;
+    }
     .date-field {
       position: relative;
       display: flex;
@@ -315,6 +400,9 @@
     .table-scroll {
       overflow-x: auto;
     }
+    .table-scroll.table-no-scroll {
+      overflow-x: hidden;
+    }
     table {
       border-collapse: collapse;
       width: 100%;
@@ -441,6 +529,7 @@
       {% block content %}{% endblock %}
     </div>
   </main>
+
 
   <script>
     (function () {
@@ -800,10 +889,103 @@
         document.querySelectorAll(".js-datetime-input").forEach(input => setupDateInput(input, true));
       }
 
+      function initComboboxes() {
+        const cache = {};
+        const readOptions = (listId) => {
+          if (cache[listId]) return cache[listId];
+          const list = document.getElementById(listId);
+          if (!list) {
+            cache[listId] = [];
+            return cache[listId];
+          }
+          const values = Array.from(list.querySelectorAll("option"))
+            .map(opt => (opt.value || "").trim())
+            .filter(Boolean);
+          cache[listId] = values;
+          return values;
+        };
+
+        const filterValues = (values, term) => {
+          const q = term.trim().toLowerCase();
+          if (!q) return values.slice(0, 8);
+          return values.filter(v => v.toLowerCase().includes(q)).slice(0, 8);
+        };
+
+        const findExact = (values, term) => {
+          const q = term.trim().toLowerCase();
+          if (!q) return "";
+          return values.find(v => v.toLowerCase() === q) || "";
+        };
+
+        document.querySelectorAll(".combo-wrapper[data-combo-list]").forEach(wrapper => {
+          const input = wrapper.querySelector(".combo-input");
+          const dropdown = wrapper.querySelector(".combo-dropdown");
+          const listId = wrapper.getAttribute("data-combo-list");
+          const targetId = wrapper.getAttribute("data-combo-target");
+          const hidden = targetId ? document.getElementById(targetId) : null;
+          if (!input || !dropdown || !listId) return;
+
+          const applySelection = (value) => {
+            input.value = value;
+            if (hidden) hidden.value = value;
+            dropdown.style.display = "none";
+            input.dispatchEvent(new Event("change"));
+          };
+
+          const renderDropdown = (term) => {
+            const options = filterValues(readOptions(listId), term);
+            dropdown.innerHTML = "";
+            if (!options.length) {
+              dropdown.style.display = "none";
+              return;
+            }
+            options.forEach(value => {
+              const btn = document.createElement("button");
+              btn.type = "button";
+              btn.textContent = value;
+              btn.addEventListener("click", () => applySelection(value));
+              dropdown.appendChild(btn);
+            });
+            dropdown.style.display = "block";
+          };
+
+          input.addEventListener("focus", () => renderDropdown(input.value));
+          input.addEventListener("input", () => {
+            if (hidden) hidden.value = input.value;
+            renderDropdown(input.value);
+          });
+          input.addEventListener("keydown", (event) => {
+            if (event.key === "Enter") {
+              const options = readOptions(listId);
+              const match = findExact(options, input.value) || filterValues(options, input.value)[0];
+              if (match) {
+                event.preventDefault();
+                applySelection(match);
+              }
+            }
+            if (event.key === "Escape") {
+              dropdown.style.display = "none";
+            }
+          });
+          input.addEventListener("blur", () => {
+            setTimeout(() => {
+              dropdown.style.display = "none";
+              if (hidden) hidden.value = input.value;
+            }, 120);
+          });
+          document.addEventListener("click", (event) => {
+            if (!wrapper.contains(event.target)) {
+              dropdown.style.display = "none";
+            }
+          });
+        });
+      }
+
       document.addEventListener("DOMContentLoaded", () => {
         makeTablesSortable();
         initNoteToggles();
         initCalendarPickers();
+        initComboboxes();
       });
     })();
   </script>

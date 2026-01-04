@@ -1,12 +1,12 @@
 from django.contrib import admin
-from .models import Card, Client, Transaction, Withdrawal
+from .models import Card, CardGroup, Client, Transaction, Withdrawal
 
 
 @admin.register(Card)
 class CardAdmin(admin.ModelAdmin):
-    list_display = ("name", "bank", "card_number", "pin", "status")
-    search_fields = ("name", "bank", "card_number")
-    list_filter = ("status", "bank")
+    list_display = ("name", "bank", "group", "card_number", "pin", "status")
+    search_fields = ("name", "bank", "group", "card_number")
+    list_filter = ("status", "bank", "group")
 
 
 @admin.register(Client)
@@ -32,3 +32,9 @@ class WithdrawalAdmin(admin.ModelAdmin):
     list_filter = ("card",)
     date_hierarchy = "date"
     ordering = ("-date",)
+
+
+@admin.register(CardGroup)
+class CardGroupAdmin(admin.ModelAdmin):
+    list_display = ("name",)
+    search_fields = ("name",)

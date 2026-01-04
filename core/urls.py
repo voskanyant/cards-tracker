@@ -16,6 +16,10 @@ urlpatterns = [
     path("clients/<int:pk>/edit/", views.client_edit, name="client_edit"),
     path("clients/<int:pk>/delete/", views.client_delete, name="client_delete"),
 
+    path("groups/create/", views.group_create, name="group_create"),
+    path("groups/<int:pk>/rename/", views.group_rename, name="group_rename"),
+    path("groups/<int:pk>/delete/", views.group_delete, name="group_delete"),
+
     path("transactions/", views.transactions_list, name="transactions_list"),
     path("transactions/add/", views.transaction_add, name="transaction_add"),
     path("transactions/<int:pk>/edit/", views.transaction_edit, name="transaction_edit"),

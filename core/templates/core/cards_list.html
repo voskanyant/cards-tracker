@@ -22,6 +22,28 @@
           </div>
         </div>
         {% endwith %}
+      {% elif field.name == "group_name" %}
+        <label>
+          <span>{{ field.label }}{% if field.field.required %} *{% endif %}</span>
+          <div class="combo-wrapper" data-combo-list="group-options">
+            {{ field }}
+            <div class="combo-dropdown"></div>
+          </div>
+          {% if field.errors %}
+            <small style="color:#c00;">{{ field.errors|join:", " }}</small>
+          {% endif %}
+        </label>
+      {% elif field.name == "bank" %}
+        <label>
+          <span>{{ field.label }}{% if field.field.required %} *{% endif %}</span>
+          <div class="combo-wrapper" data-combo-list="bank-options">
+            {{ field }}
+            <div class="combo-dropdown"></div>
+          </div>
+          {% if field.errors %}
+            <small style="color:#c00;">{{ field.errors|join:", " }}</small>
+          {% endif %}
+        </label>
       {% else %}
         <label>
           <span>{{ field.label }}{% if field.field.required %} *{% endif %}</span>
@@ -38,10 +60,38 @@
   </form>
 </section>
 
+<datalist id="group-options">
+  {% for group in groups %}
+    <option value="{{ group.name }}"></option>
+  {% endfor %}
+</datalist>
+<datalist id="bank-options">
+  {% for bank in banks %}
+    <option value="{{ bank }}"></option>
+  {% endfor %}
+</datalist>
+
+
 <section class="section-card">
   <div style="display:flex; flex-wrap:wrap; justify-content:space-between; gap:12px; align-items:center;">
     <h2 style="margin:0;">Cards</h2>
     <form method="get" style="display:flex; gap:12px; flex-wrap:wrap; align-items:flex-end;">
+      <label style="display:flex; flex-direction:column; min-width:200px;">
+        <span>Bank</span>
+        <div class="combo-wrapper" data-combo-list="bank-options" data-combo-target="cards-bank-filter">
+          <input type="hidden" name="bank" id="cards-bank-filter" value="{{ bank_filter }}">
+          <input type="text" value="{{ bank_filter }}" placeholder="Start typing bank..." autocomplete="off" autocorrect="off" autocapitalize="none" spellcheck="false" class="combo-input">
+          <div class="combo-dropdown"></div>
+        </div>
+      </label>
+      <label style="display:flex; flex-direction:column; min-width:200px;">
+        <span>Group</span>
+        <div class="combo-wrapper" data-combo-list="group-options" data-combo-target="cards-group-filter">
+          <input type="hidden" name="group" id="cards-group-filter" value="{{ group_filter }}">
+          <input type="text" value="{{ group_filter }}" placeholder="Start typing group..." autocomplete="off" autocorrect="off" autocapitalize="none" spellcheck="false" class="combo-input">
+          <div class="combo-dropdown"></div>
+        </div>
+      </label>
       <label style="display:flex; flex-direction:column;">
         <span>From</span>
         <div class="date-field">
@@ -63,15 +113,15 @@
     </form>
   </div>
 
-  <div class="table-card table-scroll" style="margin-top:16px;">
+  <div class="table-card table-scroll table-no-scroll" style="margin-top:16px;">
     <table>
       <thead>
         <tr>
           <th>Name</th>
           <th>Bank</th>
+          <th>Group</th>
           <th>Number</th>
           <th>PIN</th>
-          <th>Status</th>
           <th class="num col-narrow">Received</th>
           <th class="num col-narrow">Withdrawn</th>
           <th class="num col-narrow">Commission</th>
@@ -84,9 +134,9 @@
           <tr>
             <td>{{ c.name }}</td>
             <td>{{ c.bank }}</td>
+            <td>{% if c.group %}{{ c.group.name }}{% else %}-{% endif %}</td>
             <td>{{ c.card_number }}</td>
             <td>{{ c.pin }}</td>
-            <td>{{ c.status }}</td>
             <td class="num">{{ c.received_total|spaced_number }}</td>
             <td class="num">{{ c.withdrawn_total|spaced_number }}</td>
             <td class="num">{{ c.commission_total|spaced_number }}</td>

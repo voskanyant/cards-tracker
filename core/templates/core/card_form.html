@@ -1,12 +1,74 @@
 {% extends "core/base.html" %}
+{% load formatting %}
 {% block content %}
 <h2>{{ title }}</h2>
 
-<form method="post" style="max-width:520px;">
+<form method="post" class="form-grid" style="max-width:560px;">
   {% csrf_token %}
-  {{ form.as_p }}
-  <button type="submit">Save</button>
+  {{ form.non_field_errors }}
+  {% for field in form %}
+    {% if field.name == "notes" %}
+      {% with has_value=field.value %}
+      <div class="notes-field{% if has_value or field.errors %} is-open{% endif %}" style="grid-column:1/-1;">
+        <div class="notes-header">
+          <span>{{ field.label }}</span>
+          <button type="button" class="notes-trigger" data-note-target="notes-{{ field.auto_id }}">Add note</button>
+        </div>
+        <div class="notes-collapse" id="notes-{{ field.auto_id }}">
+          {{ field }}
+          {% if field.errors %}
+            <small style="color:#c00;">{{ field.errors|join:", " }}</small>
+          {% endif %}
+        </div>
+      </div>
+      {% endwith %}
+    {% elif field.name == "group_name" %}
+      <label>
+        <span>{{ field.label }}{% if field.field.required %} *{% endif %}</span>
+        <div class="combo-wrapper" data-combo-list="group-options">
+          {{ field }}
+          <div class="combo-dropdown"></div>
+        </div>
+        {% if field.errors %}
+          <small style="color:#c00;">{{ field.errors|join:", " }}</small>
+        {% endif %}
+      </label>
+    {% elif field.name == "bank" %}
+      <label>
+        <span>{{ field.label }}{% if field.field.required %} *{% endif %}</span>
+        <div class="combo-wrapper" data-combo-list="bank-options">
+          {{ field }}
+          <div class="combo-dropdown"></div>
+        </div>
+        {% if field.errors %}
+          <small style="color:#c00;">{{ field.errors|join:", " }}</small>
+        {% endif %}
+      </label>
+    {% else %}
+      <label>
+        <span>{{ field.label }}{% if field.field.required %} *{% endif %}</span>
+        {{ field }}
+        {% if field.errors %}
+          <small style="color:#c00;">{{ field.errors|join:", " }}</small>
+        {% endif %}
+      </label>
+    {% endif %}
+  {% endfor %}
+  <div style="grid-column:1/-1; display:flex; justify-content:flex-end;">
+    <button type="submit">Save</button>
+  </div>
 </form>
+
+<datalist id="group-options">
+  {% for group in groups %}
+    <option value="{{ group.name }}"></option>
+  {% endfor %}
+</datalist>
+<datalist id="bank-options">
+  {% for bank in banks %}
+    <option value="{{ bank }}"></option>
+  {% endfor %}
+</datalist>
 
 <p><a href="/cards/">Back to Cards</a></p>
 {% endblock %}

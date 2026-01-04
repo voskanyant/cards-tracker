@@ -6,7 +6,7 @@
     <div>
       <h2 style="margin:0;">{{ card.name }}</h2>
       <p style="margin:4px 0; color:var(--muted);">
-        Bank: {{ card.bank|default:"N/A" }} • Number: {{ card.card_number|default:"N/A" }} • PIN: {{ card.pin|default:"-" }}
+        Bank: {{ card.bank|default:"N/A" }} • Group: {% if card.group %}{{ card.group.name }}{% else %}-{% endif %} • Number: {{ card.card_number|default:"N/A" }} • PIN: {{ card.pin|default:"-" }}
       </p>
     </div>
     <a href="/cards/" class="pill">Back to cards</a>

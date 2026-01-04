@@ -1,0 +1,144 @@
+{% extends "core/base.html" %}
+{% load formatting %}
+{% block content %}
+<h2>{{ title }}</h2>
+
+<form method="post" class="form-grid" style="max-width:560px;">
+  {% csrf_token %}
+  {{ form.non_field_errors }}
+  {% for field in form %}
+    {% if field.name == "notes" %}
+      {% with has_value=field.value %}
+      <div class="notes-field{% if has_value or field.errors %} is-open{% endif %}" style="grid-column:1/-1;">
+        <div class="notes-header">
+          <span>{{ field.label }}</span>
+          <button type="button" class="notes-trigger" data-note-target="notes-{{ field.auto_id }}">Add note</button>
+        </div>
+        <div class="notes-collapse" id="notes-{{ field.auto_id }}">
+          {{ field }}
+          {% if field.errors %}
+            <small style="color:#c00;">{{ field.errors|join:", " }}</small>
+          {% endif %}
+        </div>
+      </div>
+      {% endwith %}
+    {% elif field.name == "group" %}
+      <label>
+        <span>Group</span>
+        <div class="combo-wrapper group-combo">
+          {{ field.as_hidden }}
+          <input type="text" class="combo-input" data-combo-target="{{ field.auto_id }}" data-combo-list="group-options" placeholder="Start typing group..." value="{{ group_lookup|dict_get:field.value }}" autocomplete="off">
+          <div class="combo-dropdown"></div>
+        </div>
+        <button type="button" class="group-add-btn" data-group-add="1" style="margin-top:6px; align-self:flex-start;">+ Add group</button>
+        {% if field.errors %}
+          <small style="color:#c00;">{{ field.errors|join:", " }}</small>
+        {% endif %}
+      </label>
+    {% else %}
+      <label>
+        <span>{{ field.label }}{% if field.field.required %} *{% endif %}</span>
+        {{ field }}
+        {% if field.errors %}
+          <small style="color:#c00;">{{ field.errors|join:", " }}</small>
+        {% endif %}
+      </label>
+    {% endif %}
+  {% endfor %}
+  <div style="grid-column:1/-1; display:flex; justify-content:flex-end;">
+    <button type="submit">Save</button>
+  </div>
+</form>
+
+<datalist id="group-options">
+  {% for group in groups %}
+    <option data-id="{{ group.id }}" value="{{ group.name }}"></option>
+  {% endfor %}
+</datalist>
+
+<script>
+  (function () {
+    const csrfToken = document.querySelector("form input[name='csrfmiddlewaretoken']")?.value || "";
+    const list = document.getElementById("group-options");
+    const wrapper = document.querySelector(".group-combo");
+    if (!wrapper || !list) return;
+    const hidden = wrapper.querySelector("input[type='hidden']");
+    const input = wrapper.querySelector(".combo-input");
+    const dropdown = wrapper.querySelector(".combo-dropdown");
+    if (!hidden || !input || !dropdown) return;
+
+    const getOptions = () =>
+      Array.from(list.querySelectorAll("option")).map(opt => ({
+        id: opt.dataset.id,
+        label: opt.value,
+      }));
+
+    function ensureOption(id, name) {
+      if ([...list.children].some(opt => opt.dataset.id === String(id))) return;
+      const option = document.createElement("option");
+      option.dataset.id = id;
+      option.value = name;
+      list.appendChild(option);
+    }
+
+    const render = term => {
+      const q = term.trim().toLowerCase();
+      const matches = q ? getOptions().filter(opt => opt.label.toLowerCase().includes(q)).slice(0, 8) : getOptions().slice(0, 8);
+      dropdown.innerHTML = "";
+      if (!matches.length) {
+        dropdown.style.display = "none";
+        return;
+      }
+      matches.forEach(opt => {
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.textContent = opt.label;
+        btn.dataset.id = opt.id;
+        dropdown.appendChild(btn);
+      });
+      dropdown.style.display = "block";
+      dropdown.querySelectorAll("button").forEach(btn => {
+        btn.addEventListener("click", () => {
+          hidden.value = btn.dataset.id || "";
+          input.value = btn.textContent;
+          dropdown.style.display = "none";
+        });
+      });
+    };
+
+    input.addEventListener("focus", () => render(input.value));
+    input.addEventListener("input", () => {
+      hidden.value = "";
+      render(input.value);
+    });
+    document.addEventListener("click", (e) => {
+      if (!wrapper.contains(e.target)) dropdown.style.display = "none";
+    });
+
+    const addBtn = wrapper.parentElement.querySelector("[data-group-add]");
+    addBtn?.addEventListener("click", async () => {
+      const name = prompt("New group name:");
+      if (!name) return;
+      const formData = new FormData();
+      formData.append("name", name.trim());
+      try {
+        const resp = await fetch("/groups/create/", {
+          method: "POST",
+          headers: { "X-CSRFToken": csrfToken },
+          body: formData,
+        });
+        const data = await resp.json();
+        if (!resp.ok || !data.ok) throw new Error(data.error || resp.statusText);
+        ensureOption(data.id, data.name);
+        hidden.value = data.id;
+        input.value = data.name;
+        dropdown.style.display = "none";
+      } catch (err) {
+        alert("Failed to add group: " + err.message);
+      }
+    });
+  })();
+</script>
+
+<p><a href="/cards/">Back to Cards</a></p>
+{% endblock %}

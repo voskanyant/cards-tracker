@@ -1,9 +1,17 @@
 from django.db import models
 
 
+class CardGroup(models.Model):
+    name = models.CharField(max_length=80, unique=True)
+
+    def __str__(self):
+        return self.name
+
+
 class Card(models.Model):
     name = models.CharField(max_length=120)
     bank = models.CharField(max_length=80, blank=True)
+    group = models.ForeignKey(CardGroup, null=True, blank=True, on_delete=models.SET_NULL, related_name="cards")
     card_number = models.CharField(max_length=32, blank=True)
     pin = models.CharField(max_length=16, blank=True)
     status = models.CharField(
