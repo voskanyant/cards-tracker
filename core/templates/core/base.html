@@ -60,6 +60,37 @@
       flex-direction: column;
       gap: 20px;
     }
+    .flash-stack {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+    .flash {
+      border-radius: var(--radius);
+      padding: 12px 16px;
+      font-weight: 600;
+      border: 1px solid var(--border);
+    }
+    .flash-success {
+      background: #ecfdf5;
+      color: #065f46;
+      border-color: #a7f3d0;
+    }
+    .flash-error {
+      background: #fef2f2;
+      color: #991b1b;
+      border-color: #fecaca;
+    }
+    .flash-warning {
+      background: #fffbeb;
+      color: #92400e;
+      border-color: #fde68a;
+    }
+    .flash-info {
+      background: #eff6ff;
+      color: #1d4ed8;
+      border-color: #bfdbfe;
+    }
     h1, h2, h3 {
       margin: 0 0 10px;
       font-weight: 700;
@@ -78,6 +109,162 @@
       display: grid;
       grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
       gap: 16px;
+    }
+    .notes-field {
+      border: 1px dashed var(--border);
+      border-radius: var(--radius);
+      padding: 12px;
+      background: #f8fafc;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .notes-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 8px;
+    }
+    .notes-header span {
+      font-size: 0.85rem;
+      font-weight: 500;
+      color: var(--muted);
+    }
+    .notes-trigger {
+      background: transparent;
+      border: none;
+      color: var(--primary);
+      font-weight: 600;
+      cursor: pointer;
+      padding: 0;
+    }
+    .notes-collapse {
+      max-height: 0;
+      overflow: hidden;
+      opacity: 0;
+      transition: max-height 0.2s ease, opacity 0.2s ease;
+    }
+    .notes-field textarea {
+      width: 100%;
+      border-radius: 10px;
+      border: 1px solid var(--border);
+      padding: 10px 12px;
+      font: inherit;
+    }
+    .notes-field.is-open .notes-collapse {
+      max-height: 220px;
+      opacity: 1;
+      margin-top: 6px;
+    }
+    .date-field {
+      position: relative;
+      display: flex;
+      align-items: center;
+    }
+    .date-field input {
+      width: 100%;
+      padding-right: 40px;
+    }
+    .calendar-toggle {
+      position: absolute;
+      right: 6px;
+      border: none;
+      background: transparent;
+      cursor: pointer;
+      color: var(--muted);
+      font-size: 1rem;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 4px;
+    }
+    .calendar-panel {
+      position: absolute;
+      background: #fff;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      box-shadow: 0 20px 40px rgba(15, 23, 42, 0.15);
+      width: 270px;
+      padding: 12px;
+      z-index: 50;
+      display: none;
+    }
+    .calendar-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 8px;
+      font-weight: 600;
+      font-size: 0.95rem;
+    }
+    .calendar-header button {
+      background: none;
+      border: none;
+      font-size: 1rem;
+      cursor: pointer;
+      color: var(--primary);
+    }
+    .calendar-grid {
+      display: grid;
+      grid-template-columns: repeat(7, 1fr);
+      gap: 4px;
+      margin-bottom: 8px;
+      text-align: center;
+    }
+    .calendar-grid span {
+      font-size: 0.75rem;
+      font-weight: 600;
+      color: var(--muted);
+    }
+    .calendar-grid button {
+      border: none;
+      border-radius: 8px;
+      padding: 6px 0;
+      background: #f8fafc;
+      cursor: pointer;
+      font-size: 0.85rem;
+      color: var(--text);
+    }
+    .calendar-grid button.is-selected {
+      background: var(--primary);
+      color: #fff;
+    }
+    .calendar-grid button:disabled {
+      opacity: 0.3;
+      cursor: default;
+    }
+    .calendar-time {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      gap: 6px;
+      margin-bottom: 8px;
+    }
+    .calendar-time select {
+      border-radius: 8px;
+      border: 1px solid var(--border);
+      padding: 4px 8px;
+      font: inherit;
+    }
+    .calendar-actions {
+      display: flex;
+      justify-content: space-between;
+      gap: 8px;
+    }
+    .calendar-actions button {
+      flex: 1;
+      border: none;
+      border-radius: 8px;
+      padding: 8px 0;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    .calendar-actions button[data-action="clear"] {
+      background: #f3f4f6;
+    }
+    .calendar-actions button[data-action="apply"] {
+      background: var(--primary);
+      color: #fff;
     }
     label span {
       font-size: 0.85rem;
@@ -244,6 +431,13 @@
 
   <main>
     <div class="page">
+      {% if messages %}
+        <div class="flash-stack">
+          {% for message in messages %}
+            <div class="flash flash-{{ message.tags|default:'info' }}">{{ message }}</div>
+          {% endfor %}
+        </div>
+      {% endif %}
       {% block content %}{% endblock %}
     </div>
   </main>
@@ -333,7 +527,284 @@
         });
       }
 
-      document.addEventListener("DOMContentLoaded", makeTablesSortable);
+      function initNoteToggles() {
+        document.querySelectorAll(".notes-trigger").forEach(btn => {
+          const targetId = btn.getAttribute("data-note-target");
+          const target = document.getElementById(targetId);
+          if (!target) return;
+          const container = target.closest(".notes-field");
+          const field = target.querySelector("textarea, input, select");
+
+          function updateLabel() {
+            const open = container.classList.contains("is-open");
+            btn.textContent = open ? "Hide notes" : "Add note";
+          }
+
+          if (field && field.value) {
+            container.classList.add("is-open");
+          }
+
+          btn.addEventListener("click", () => {
+            container.classList.toggle("is-open");
+            if (container.classList.contains("is-open") && field) {
+              field.focus();
+            }
+            updateLabel();
+          });
+
+          updateLabel();
+        });
+      }
+
+      function clamp(num, min, max) {
+        return Math.min(Math.max(num, min), max);
+      }
+
+      function formatDateParts(day, month, year) {
+        const d = clamp(parseInt(day || "1", 10) || 1, 1, 31);
+        const m = clamp(parseInt(month || "1", 10) || 1, 1, 12);
+        const y = year.length === 2 ? 2000 + parseInt(year, 10) : parseInt(year || "2000", 10) || 2000;
+        const maxDay = new Date(y, m, 0).getDate();
+        const finalDay = clamp(d, 1, maxDay);
+        return {
+          day: String(finalDay).padStart(2, "0"),
+          month: String(m).padStart(2, "0"),
+          year: String(y),
+        };
+      }
+
+      function normalizeDateInputValue(input, includeTime) {
+        const raw = input.value.trim();
+        if (!raw) return;
+        const digits = raw.replace(/\D/g, "");
+        if (digits.length < 8) return;
+        const parts = formatDateParts(digits.slice(0, 2), digits.slice(2, 4), digits.slice(4, 8));
+        let value = `${parts.day}/${parts.month}/${parts.year}`;
+        if (includeTime) {
+          const timeDigits = digits.slice(8);
+          const hours = timeDigits.slice(0, 2);
+          const minutes = timeDigits.slice(2, 4);
+          const hh = String(clamp(parseInt(hours || "0", 10) || 0, 0, 23)).padStart(2, "0");
+          const mm = String(clamp(parseInt(minutes || "0", 10) || 0, 0, 59)).padStart(2, "0");
+          value += ` ${hh}:${mm}`;
+        }
+        input.value = value;
+      }
+
+      function parseInputDate(value, includeTime) {
+        if (!value) return null;
+        const match = value.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2,4})(?:\s+(\d{1,2}):(\d{2}))?$/);
+        if (!match) return null;
+        const year = match[3].length === 2 ? 2000 + parseInt(match[3], 10) : parseInt(match[3], 10);
+        const month = parseInt(match[2], 10) - 1;
+        const day = parseInt(match[1], 10);
+        const hours = includeTime ? parseInt(match[4] || "0", 10) : 0;
+        const minutes = includeTime ? parseInt(match[5] || "0", 10) : 0;
+        if (Number.isNaN(year) || Number.isNaN(month) || Number.isNaN(day)) return null;
+        return new Date(year, month, day, hours, minutes);
+      }
+
+      function formatDate(date) {
+        const dd = String(date.getDate()).padStart(2, "0");
+        const mm = String(date.getMonth() + 1).padStart(2, "0");
+        const yyyy = date.getFullYear();
+        return `${dd}/${mm}/${yyyy}`;
+      }
+
+      function formatDateTime(date) {
+        return `${formatDate(date)} ${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}`;
+      }
+
+      class CalendarWidget {
+        constructor(input, includeTime) {
+          this.input = input;
+          this.includeTime = includeTime;
+          this.panel = document.createElement("div");
+          this.panel.className = "calendar-panel";
+          this.panel.innerHTML = this.template();
+          document.body.appendChild(this.panel);
+          this.current = new Date();
+          this.selected = null;
+          this.visible = false;
+          document.addEventListener("click", (e) => {
+            if (!this.visible) return;
+            if (this.panel.contains(e.target) || this.input === e.target) return;
+            const toggle = this.input.parentElement?.querySelector(".calendar-toggle");
+            if (toggle && toggle.contains(e.target)) return;
+            this.hide();
+          });
+          this.bindControls();
+        }
+
+        template() {
+          const hours = Array.from({ length: 24 }, (_, i) => `<option value="${String(i).padStart(2, "0")}">${String(i).padStart(2, "0")}</option>`).join("");
+          const minutes = Array.from({ length: 60 }, (_, i) => `<option value="${String(i).padStart(2, "0")}">${String(i).padStart(2, "0")}</option>`).join("");
+          return `
+            <div class="calendar-header">
+              <button type="button" data-action="prev">&#10094;</button>
+              <div class="calendar-month"></div>
+              <button type="button" data-action="next">&#10095;</button>
+            </div>
+            <div class="calendar-grid"></div>
+            ${this.includeTime ? `<div class="calendar-time">
+              <select class="calendar-hours">${hours}</select>
+              :
+              <select class="calendar-minutes">${minutes}</select>
+            </div>` : ""}
+            <div class="calendar-actions">
+              <button type="button" data-action="clear">Clear</button>
+              <button type="button" data-action="apply">Apply</button>
+            </div>
+          `;
+        }
+
+        bindControls() {
+          this.panel.querySelector("[data-action='prev']").addEventListener("click", () => this.changeMonth(-1));
+          this.panel.querySelector("[data-action='next']").addEventListener("click", () => this.changeMonth(1));
+          this.panel.querySelector("[data-action='clear']").addEventListener("click", () => this.clear());
+          this.panel.querySelector("[data-action='apply']").addEventListener("click", () => this.apply());
+        }
+
+        changeMonth(delta) {
+          this.current.setMonth(this.current.getMonth() + delta);
+          this.render();
+        }
+
+        render() {
+          const monthLabel = this.panel.querySelector(".calendar-month");
+          const grid = this.panel.querySelector(".calendar-grid");
+          const year = this.current.getFullYear();
+          const month = this.current.getMonth();
+          const firstDay = new Date(year, month, 1).getDay();
+          const daysInMonth = new Date(year, month + 1, 0).getDate();
+
+          monthLabel.textContent = this.current.toLocaleString(undefined, { month: "long", year: "numeric" });
+
+          const fragments = [];
+          ["Su","Mo","Tu","We","Th","Fr","Sa"].forEach(day => {
+            fragments.push(`<span>${day}</span>`);
+          });
+
+          for (let i = 0; i < firstDay; i += 1) {
+            fragments.push(`<button type="button" disabled></button>`);
+          }
+          for (let day = 1; day <= daysInMonth; day += 1) {
+            const d = new Date(year, month, day);
+            const isSelected =
+              this.selected &&
+              this.selected.getFullYear() === d.getFullYear() &&
+              this.selected.getMonth() === d.getMonth() &&
+              this.selected.getDate() === d.getDate();
+            fragments.push(`<button type="button" data-day="${day}" class="${isSelected ? "is-selected" : ""}">${day}</button>`);
+          }
+
+          grid.innerHTML = fragments.join("");
+          grid.querySelectorAll("button[data-day]").forEach(btn => {
+            btn.addEventListener("click", () => {
+              const day = parseInt(btn.dataset.day, 10);
+              let base = parseInputDate(this.input.value, this.includeTime) || new Date();
+              base = new Date(year, month, day, base.getHours(), base.getMinutes());
+              this.selected = base;
+              this.render();
+              if (this.includeTime) {
+                const hours = parseInt(this.panel.querySelector(".calendar-hours").value, 10);
+                const minutes = parseInt(this.panel.querySelector(".calendar-minutes").value, 10);
+                base.setHours(hours, minutes, 0, 0);
+                this.input.value = formatDateTime(base);
+              } else {
+                this.input.value = formatDate(base);
+                this.hide();
+              }
+              this.input.dispatchEvent(new Event("change"));
+            });
+          });
+
+          if (this.includeTime) {
+            const target = this.selected || parseInputDate(this.input.value, true) || new Date();
+            this.panel.querySelector(".calendar-hours").value = String(target.getHours()).padStart(2, "0");
+            this.panel.querySelector(".calendar-minutes").value = String(target.getMinutes()).padStart(2, "0");
+          }
+        }
+
+        clear() {
+          this.selected = null;
+          this.input.value = "";
+          this.hide();
+        }
+
+        apply() {
+          let ref = this.selected || parseInputDate(this.input.value, this.includeTime) || new Date();
+          if (this.includeTime) {
+            const hours = parseInt(this.panel.querySelector(".calendar-hours").value, 10);
+            const minutes = parseInt(this.panel.querySelector(".calendar-minutes").value, 10);
+            ref.setHours(hours, minutes, 0, 0);
+            this.input.value = formatDateTime(ref);
+          } else {
+            this.input.value = formatDate(ref);
+          }
+          this.hide();
+          this.input.dispatchEvent(new Event("change"));
+        }
+
+        show() {
+          this.visible = true;
+          const rect = this.input.getBoundingClientRect();
+          const scrollY = window.scrollY || document.documentElement.scrollTop;
+          const scrollX = window.scrollX || document.documentElement.scrollLeft;
+          let left = scrollX + rect.left;
+          const panelWidth = this.panel.offsetWidth || 270;
+          if (left + panelWidth > scrollX + window.innerWidth) {
+            left = scrollX + window.innerWidth - panelWidth - 10;
+          }
+          this.panel.style.left = `${left}px`;
+          this.panel.style.top = `${scrollY + rect.bottom + 6}px`;
+          const parsed = parseInputDate(this.input.value, this.includeTime);
+          this.selected = parsed;
+          this.current = parsed ? new Date(parsed) : new Date();
+          this.render();
+          this.panel.style.display = "block";
+        }
+
+        hide() {
+          this.visible = false;
+          this.panel.style.display = "none";
+        }
+      }
+
+      function setupDateInput(input, includeTime) {
+        const widget = new CalendarWidget(input, includeTime);
+        const toggle = input.parentElement?.querySelector(".calendar-toggle");
+        input.addEventListener("focus", () => widget.show());
+        if (toggle) {
+          toggle.addEventListener("click", (event) => {
+            event.preventDefault();
+            if (widget.visible) {
+              widget.hide();
+            } else {
+              widget.show();
+              input.focus();
+            }
+          });
+        }
+        input.addEventListener("blur", () => {
+          setTimeout(() => normalizeDateInputValue(input, includeTime), 50);
+        });
+        input.addEventListener("change", () => normalizeDateInputValue(input, includeTime));
+        if (input.value) {
+          normalizeDateInputValue(input, includeTime);
+        }
+      }
+
+      function initCalendarPickers() {
+        document.querySelectorAll(".js-date-input").forEach(input => setupDateInput(input, false));
+        document.querySelectorAll(".js-datetime-input").forEach(input => setupDateInput(input, true));
+      }
+
+      document.addEventListener("DOMContentLoaded", () => {
+        makeTablesSortable();
+        initNoteToggles();
+        initCalendarPickers();
+      });
     })();
   </script>
 </body>

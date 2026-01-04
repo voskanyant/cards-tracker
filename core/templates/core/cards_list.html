@@ -7,13 +7,30 @@
     {% csrf_token %}
     {{ form.non_field_errors }}
     {% for field in form %}
-      <label>
-        <span>{{ field.label }}{% if field.field.required %} *{% endif %}</span>
-        {{ field }}
-        {% if field.errors %}
-          <small style="color:#c00;">{{ field.errors|join:", " }}</small>
-        {% endif %}
-      </label>
+      {% if field.name == "notes" %}
+        {% with has_value=field.value %}
+        <div class="notes-field{% if has_value or field.errors %} is-open{% endif %}" style="grid-column:1/-1;">
+          <div class="notes-header">
+            <span>{{ field.label }}</span>
+            <button type="button" class="notes-trigger" data-note-target="notes-{{ field.auto_id }}">Add note</button>
+          </div>
+          <div class="notes-collapse" id="notes-{{ field.auto_id }}">
+            {{ field }}
+            {% if field.errors %}
+              <small style="color:#c00;">{{ field.errors|join:", " }}</small>
+            {% endif %}
+          </div>
+        </div>
+        {% endwith %}
+      {% else %}
+        <label>
+          <span>{{ field.label }}{% if field.field.required %} *{% endif %}</span>
+          {{ field }}
+          {% if field.errors %}
+            <small style="color:#c00;">{{ field.errors|join:", " }}</small>
+          {% endif %}
+        </label>
+      {% endif %}
     {% endfor %}
     <div style="grid-column:1/-1; display:flex; justify-content:flex-end;">
       <button type="submit">Save Card</button>
@@ -27,11 +44,17 @@
     <form method="get" style="display:flex; gap:12px; flex-wrap:wrap; align-items:flex-end;">
       <label style="display:flex; flex-direction:column;">
         <span>From</span>
-        <input type="date" name="start" value="{{ start }}">
+        <div class="date-field">
+          <input type="text" name="start" placeholder="dd/mm/yyyy" value="{{ start }}" autocomplete="off" inputmode="numeric" class="date-input js-date-input">
+          <button type="button" class="calendar-toggle" aria-label="Open calendar">&#128197;</button>
+        </div>
       </label>
       <label style="display:flex; flex-direction:column;">
         <span>To</span>
-        <input type="date" name="end" value="{{ end }}">
+        <div class="date-field">
+          <input type="text" name="end" placeholder="dd/mm/yyyy" value="{{ end }}" autocomplete="off" inputmode="numeric" class="date-input js-date-input">
+          <button type="button" class="calendar-toggle" aria-label="Open calendar">&#128197;</button>
+        </div>
       </label>
       <div>
         <button type="submit">Apply</button>
@@ -53,7 +76,7 @@
           <th class="num col-narrow">Withdrawn</th>
           <th class="num col-narrow">Commission</th>
           <th class="num col-narrow">Balance</th>
-          <th></th>
+          <th>Actions</th>
         </tr>
       </thead>
       <tbody>
@@ -68,9 +91,14 @@
             <td class="num">{{ c.withdrawn_total|spaced_number }}</td>
             <td class="num">{{ c.commission_total|spaced_number }}</td>
             <td class="num">{{ c.balance_total|spaced_number }}</td>
-            <td style="display:flex; gap:6px; flex-wrap:wrap;">
+            <td style="display:flex; gap:6px; flex-wrap:wrap; align-items:center;">
               <a href="/cards/{{ c.id }}/edit/">Edit</a>
-              <a href="/cards/{{ c.id }}/history/?start={{ start }}&end={{ end }}">History</a>
+              <a href="/cards/{{ c.id }}/history/?start={{ start|urlencode }}&end={{ end|urlencode }}">History</a>
+              <form method="post" action="{% url 'card_delete' c.id %}" style="display:inline;" onsubmit="return confirm('Delete this card?');">
+                {% csrf_token %}
+                <input type="hidden" name="next" value="{{ request.get_full_path }}">
+                <button type="submit" style="background:none;border:none;color:#c00;padding:0;margin:0;cursor:pointer;font:inherit;">Delete</button>
+              </form>
             </td>
           </tr>
         {% endfor %}

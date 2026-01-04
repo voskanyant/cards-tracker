@@ -2,7 +2,7 @@ from django.db import models
 
 
 class Card(models.Model):
-    name = models.CharField(max_length=120, unique=True)  # card_name is the ID
+    name = models.CharField(max_length=120)
     bank = models.CharField(max_length=80, blank=True)
     card_number = models.CharField(max_length=32, blank=True)
     pin = models.CharField(max_length=16, blank=True)
@@ -15,6 +15,14 @@ class Card(models.Model):
 
     def __str__(self):
         return self.name
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["name", "bank", "card_number"],
+                name="unique_card_identity",
+            )
+        ]
 
 
 class Client(models.Model):

@@ -14,11 +14,17 @@
   <form method="get" style="margin-top:12px; display:flex; gap:12px; flex-wrap:wrap; align-items:flex-end;">
     <label style="display:flex; flex-direction:column;">
       <span>From</span>
-      <input type="date" name="start" value="{{ start }}">
+      <div class="date-field">
+        <input type="text" name="start" placeholder="dd/mm/yyyy" value="{{ start }}" autocomplete="off" inputmode="numeric" class="date-input js-date-input">
+        <button type="button" class="calendar-toggle" aria-label="Open calendar">&#128197;</button>
+      </div>
     </label>
     <label style="display:flex; flex-direction:column;">
       <span>To</span>
-      <input type="date" name="end" value="{{ end }}">
+      <div class="date-field">
+        <input type="text" name="end" placeholder="dd/mm/yyyy" value="{{ end }}" autocomplete="off" inputmode="numeric" class="date-input js-date-input">
+        <button type="button" class="calendar-toggle" aria-label="Open calendar">&#128197;</button>
+      </div>
     </label>
     <div>
       <button type="submit">Apply</button>
@@ -52,7 +58,7 @@
       <tbody>
         {% for t in transactions %}
           <tr>
-            <td>{{ t.timestamp|date:"d.m.Y, H:i" }}</td>
+            <td>{{ t.timestamp|date:"d/m/Y, H:i" }}</td>
             <td>{{ t.client.name }}</td>
             <td>{{ t.amount_rub|spaced_number }}</td>
             <td>{{ t.amount_usd|spaced_number }}</td>
@@ -76,7 +82,7 @@
       <tbody>
         {% for wd in withdrawals %}
           <tr>
-            <td>{{ wd.date|date:"d.m.Y" }}</td>
+            <td>{{ wd.date|date:"d/m/Y" }}</td>
             <td>{% if wd.fully %}Full{% else %}Partial{% endif %}</td>
             <td>{{ wd.amount|spaced_number }}</td>
             <td>{{ wd.commission|spaced_number }}</td>

@@ -6,13 +6,30 @@
     {% csrf_token %}
     {{ form.non_field_errors }}
     {% for field in form %}
-      <label>
-        <span>{{ field.label }}{% if field.field.required %} *{% endif %}</span>
-        {{ field }}
-        {% if field.errors %}
-          <small style="color:#c00;">{{ field.errors|join:", " }}</small>
-        {% endif %}
-      </label>
+      {% if field.name == "notes" %}
+        {% with has_value=field.value %}
+        <div class="notes-field{% if has_value or field.errors %} is-open{% endif %}" style="grid-column:1/-1;">
+          <div class="notes-header">
+            <span>{{ field.label }}</span>
+            <button type="button" class="notes-trigger" data-note-target="notes-{{ field.auto_id }}">Add note</button>
+          </div>
+          <div class="notes-collapse" id="notes-{{ field.auto_id }}">
+            {{ field }}
+            {% if field.errors %}
+              <small style="color:#c00;">{{ field.errors|join:", " }}</small>
+            {% endif %}
+          </div>
+        </div>
+        {% endwith %}
+      {% else %}
+        <label>
+          <span>{{ field.label }}{% if field.field.required %} *{% endif %}</span>
+          {{ field }}
+          {% if field.errors %}
+            <small style="color:#c00;">{{ field.errors|join:", " }}</small>
+          {% endif %}
+        </label>
+      {% endif %}
     {% endfor %}
     <div style="grid-column:1/-1; display:flex; justify-content:flex-end;">
       <button type="submit">Save Client</button>
@@ -26,14 +43,21 @@
   <div class="table-card table-scroll" style="margin-top:16px;">
     <table>
       <thead>
-        <tr><th>Name</th><th>Status</th><th></th></tr>
+        <tr><th>Name</th><th>Status</th><th>Actions</th></tr>
       </thead>
       <tbody>
         {% for c in clients %}
           <tr>
             <td>{{ c.name }}</td>
             <td>{{ c.status }}</td>
-            <td><a href="/clients/{{ c.id }}/edit/">Edit</a></td>
+            <td style="display:flex; gap:6px; flex-wrap:wrap; align-items:center;">
+              <a href="/clients/{{ c.id }}/edit/">Edit</a>
+              <form method="post" action="{% url 'client_delete' c.id %}" style="display:inline;" onsubmit="return confirm('Delete this client?');">
+                {% csrf_token %}
+                <input type="hidden" name="next" value="{{ request.get_full_path }}">
+                <button type="submit" style="background:none;border:none;color:#c00;padding:0;margin:0;cursor:pointer;font:inherit;">Delete</button>
+              </form>
+            </td>
           </tr>
         {% endfor %}
       </tbody>

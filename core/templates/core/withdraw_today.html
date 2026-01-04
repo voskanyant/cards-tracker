@@ -8,13 +8,16 @@
       <div style="display:flex; flex-wrap:wrap; gap:12px;">
         <label style="display:flex; flex-direction:column; min-width:160px;">
           <span>Work date</span>
-          <input id="workdate" type="date" value="{{ day|date:'Y-m-d' }}">
+          <div class="date-field">
+            <input id="workdate" type="text" placeholder="dd/mm/yyyy" value="{{ day_display }}" autocomplete="off" inputmode="numeric" class="date-input js-date-input">
+            <button type="button" class="calendar-toggle" aria-label="Open calendar">&#128197;</button>
+          </div>
         </label>
         <label style="display:flex; flex-direction:column; min-width:220px;">
           <span>Bank filter</span>
           <div class="combo-wrapper">
             <input type="hidden" id="bank-filter" value="{{ selected_bank }}">
-            <input type="text" class="combo-input" data-combo-list="withdraw-bank-options" placeholder="Start typing bank..." value="{{ selected_bank }}" autocomplete="off" autocorrect="off" autocapitalize="none" spellcheck="false">
+            <input type="text" id="bank-input" class="combo-input" data-combo-list="withdraw-bank-options" placeholder="Start typing bank..." value="{{ selected_bank }}" autocomplete="off" autocorrect="off" autocapitalize="none" spellcheck="false">
             <div class="combo-dropdown"></div>
           </div>
         </label>
@@ -299,13 +302,29 @@
 	  if (bankHidden && bankInput && bankDropdown) {
 		const filterOptions = term => {
 		  const q = term.trim().toLowerCase();
-		  if (!q) return bankOptions.slice(0, 8);
-		  return bankOptions.filter(opt => opt.label.toLowerCase().includes(q)).slice(0, 8);
+		  const matches = q
+			? bankOptions.filter(opt => opt.label.toLowerCase().includes(q)).slice(0, 8)
+			: bankOptions;
+		  return matches;
 		};
 
 		const findMatch = term => {
 		  const lowered = term.trim().toLowerCase();
 		  return bankOptions.find(opt => opt.label.toLowerCase() === lowered);
+		};
+
+		const findFirstMatch = term => {
+		  if (!term.trim()) return null;
+		  const matches = filterOptions(term);
+		  return matches.length ? matches[0] : null;
+		};
+
+		const applySelection = opt => {
+		  if (!opt) return;
+		  bankHidden.value = opt.id || "";
+		  bankInput.value = opt.label;
+		  bankDropdown.style.display = "none";
+		  navigateWithFilters();
 		};
 
 		const updateDropdown = term => {
@@ -315,6 +334,7 @@
 			bankDropdown.style.display = "none";
 			return;
 		  }
+		  bankDropdown.scrollTop = 0;
 		  matches.forEach(opt => {
 			const btn = document.createElement("button");
 			btn.type = "button";
@@ -325,10 +345,7 @@
 		  bankDropdown.style.display = "block";
 		  bankDropdown.querySelectorAll("button").forEach(btn => {
 			btn.addEventListener("click", () => {
-			  bankHidden.value = btn.dataset.id || "";
-			  bankInput.value = btn.textContent;
-			  bankDropdown.style.display = "none";
-			  navigateWithFilters();
+			  applySelection({ id: btn.dataset.id || "", label: btn.textContent });
 			});
 		  });
 		};
@@ -356,13 +373,8 @@
 		bankInput.addEventListener("keydown", (e) => {
 		  if (e.key === "Enter") {
 			e.preventDefault();
-			const match = findMatch(bankInput.value);
-			if (match) {
-			  bankHidden.value = match.id;
-			  bankInput.value = match.label;
-			  bankDropdown.style.display = "none";
-			  navigateWithFilters();
-			}
+			const match = findMatch(bankInput.value) || findFirstMatch(bankInput.value);
+			if (match) applySelection(match);
 		  }
 		  if (e.key === "Escape") {
 			bankDropdown.style.display = "none";
@@ -371,11 +383,13 @@
 
 		bankInput.addEventListener("blur", () => {
 		  setTimeout(() => {
-			const match = findMatch(bankInput.value);
+			const active = document.activeElement;
+			if (active && bankDropdown.contains(active)) {
+			  return;
+			}
+			const match = findMatch(bankInput.value) || findFirstMatch(bankInput.value);
 			if (match) {
-			  bankHidden.value = match.id;
-			  bankInput.value = match.label;
-			  navigateWithFilters();
+			  applySelection(match);
 			} else if (bankInput.value.trim() === "") {
 			  bankHidden.value = "";
 			  navigateWithFilters();
@@ -383,7 +397,7 @@
 			  bankInput.value = bankHidden.value;
 			}
 			bankDropdown.style.display = "none";
-		  }, 100);
+		  }, 120);
 		});
 	  }
 

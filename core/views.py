@@ -2,20 +2,23 @@ from datetime import date, timedelta, datetime, time
 from decimal import Decimal
 from collections import defaultdict
 
+from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.paginator import Paginator
 from django.db.models import Sum
+from django.db.models.deletion import ProtectedError
 from django.shortcuts import render
 from django.utils.dateparse import parse_date
 from django.http import JsonResponse
 from django.views.decorators.http import require_POST
 from django.utils import timezone
 from django.shortcuts import get_object_or_404, redirect
+from django.urls import reverse
 from .forms import CardForm, ClientForm, TransactionForm
-
-
-
 from .models import Card, Client, Transaction, Withdrawal
+
+DATE_DISPLAY_FORMAT = "%d/%m/%Y"
+DATE_PARSE_FORMATS = ["%d/%m/%Y", "%Y-%m-%d"]
 
 
 def _withdrawal_actual_amount(wd, cache=None):
@@ -73,10 +76,48 @@ def _should_have(card: Card, day: date) -> Decimal:
     return _closing_before(card, day) + _received_today(card, day)
 
 
+def _card_display(card: Card) -> str:
+    name = card.name
+    last4 = ""
+    if card.card_number:
+        stripped = card.card_number.replace(" ", "")
+        if len(stripped) >= 4:
+            last4 = stripped[-4:]
+        elif len(card.card_number) >= 4:
+            last4 = card.card_number[-4:]
+    label = name
+    if last4:
+        label = f"{label} *{last4}"
+    bank = (card.bank or "").strip()
+    if bank:
+        label = f"{bank} {label}"
+    return label.strip()
+
+
+def _parse_user_date(raw: str):
+    raw = (raw or "").strip()
+    if not raw:
+        return None
+    for fmt in DATE_PARSE_FORMATS:
+        try:
+            return datetime.strptime(raw, fmt).date()
+        except ValueError:
+            continue
+    parsed = parse_date(raw)
+    return parsed
+
+
+def _format_user_date(day: date) -> str:
+    return day.strftime(DATE_DISPLAY_FORMAT)
+
+
 @login_required
 def withdraw_today(request):
-    day = parse_date(request.GET.get("date") or "") or date.today()
+    day_raw = (request.GET.get("date") or "").strip()
+    parsed_day = _parse_user_date(day_raw)
+    day = parsed_day or date.today()
     bank_filter = (request.GET.get("bank") or "").strip()
+    day_display = _format_user_date(parsed_day or day)
 
     # IMPORTANT: this view must always return render() at the end
     # We no longer use POST here (autosave uses a separate endpoint),
@@ -142,7 +183,12 @@ def withdraw_today(request):
     banks.sort()
 
     if bank_filter:
-        rows = [r for r in rows if r["bank"] == bank_filter]
+        filter_lower = bank_filter.lower()
+        exact_rows = [r for r in rows if (r["bank"] or "").lower() == filter_lower]
+        filtered_rows = exact_rows or [
+            r for r in rows if filter_lower in (r["bank"] or "").lower()
+        ]
+        rows = filtered_rows
         totals = {
             "should": Decimal("0"),
             "withdrawn": Decimal("0"),
@@ -154,11 +200,20 @@ def withdraw_today(request):
             totals["withdrawn"] += r["withdrawn_value"]
             totals["commission"] += r["commission_value"]
             totals["remaining"] += r["remaining"]
+        if rows:
+            bank_filter = rows[0]["bank"]
 
     return render(
         request,
         "core/withdraw_today.html",
-        {"day": day, "rows": rows, "totals": totals, "banks": banks, "selected_bank": bank_filter},
+        {
+            "day": day,
+            "day_display": day_display,
+            "rows": rows,
+            "totals": totals,
+            "banks": banks,
+            "selected_bank": bank_filter,
+        },
     )
 
 @login_required
@@ -171,7 +226,7 @@ def withdraw_today_save(request):
     if not day_str or not card_id:
         return JsonResponse({"ok": False, "error": "Missing date or card_id"}, status=400)
 
-    day = parse_date(day_str)
+    day = _parse_user_date(day_str)
     if not day:
         return JsonResponse({"ok": False, "error": "Bad date format"}, status=400)
 
@@ -199,10 +254,14 @@ def withdraw_today_save(request):
 def cards_list(request):
     cards = Card.objects.all().order_by("name")
 
-    start_raw = request.GET.get("start") or ""
-    end_raw = request.GET.get("end") or ""
-    start_date = parse_date(start_raw) if start_raw else None
-    end_date = parse_date(end_raw) if end_raw else None
+    start_raw = (request.GET.get("start") or "").strip()
+    end_raw = (request.GET.get("end") or "").strip()
+    start_date = _parse_user_date(start_raw)
+    end_date = _parse_user_date(end_raw)
+    if start_date:
+        start_raw = _format_user_date(start_date)
+    if end_date:
+        end_raw = _format_user_date(end_date)
 
     tx_filter = {}
     wd_filter = {}
@@ -280,11 +339,17 @@ def transactions_list(request):
 
     cards = Card.objects.all().order_by("name")
     clients = Client.objects.all().order_by("name")
+    for card in cards:
+        card.display_label = _card_display(card)
 
-    start_raw = request.GET.get("start") or ""
-    end_raw = request.GET.get("end") or ""
-    start_date = parse_date(start_raw) if start_raw else None
-    end_date = parse_date(end_raw) if end_raw else None
+    start_raw = (request.GET.get("start") or "").strip()
+    end_raw = (request.GET.get("end") or "").strip()
+    start_date = _parse_user_date(start_raw)
+    end_date = _parse_user_date(end_raw)
+    if start_date:
+        start_raw = _format_user_date(start_date)
+    if end_date:
+        end_raw = _format_user_date(end_date)
 
     if start_date:
         txs = txs.filter(timestamp__date__gte=start_date)
@@ -310,7 +375,7 @@ def transactions_list(request):
         "form": form,
         "cards": cards,
         "clients": clients,
-        "card_lookup": {str(c.id): c.name for c in cards},
+        "card_lookup": {str(c.id): c.display_label for c in cards},
         "client_lookup": {str(c.id): c.name for c in clients},
     }
     return render(request, "core/transactions_list.html", context)
@@ -333,6 +398,27 @@ def card_edit(request, pk: int):
         return redirect("cards_list")
     return render(request, "core/card_form.html", {"form": form, "title": "Edit Card"})
 
+
+@login_required
+@require_POST
+def card_delete(request, pk: int):
+    card = get_object_or_404(Card, pk=pk)
+    next_url = request.POST.get("next") or request.META.get("HTTP_REFERER") or reverse("cards_list")
+    if not next_url or not next_url.startswith("/"):
+        next_url = reverse("cards_list")
+    if card.transactions.exists():
+        messages.error(request, "Cannot delete card with existing transactions. Delete them first.")
+        return redirect(next_url)
+    # clean up withdrawals (user can't remove them elsewhere)
+    card.withdrawals.all().delete()
+    try:
+        card.delete()
+        messages.success(request, f"Card '{card.name}' deleted.")
+    except ProtectedError:
+        messages.error(request, "Cannot delete card due to linked records.")
+    return redirect(next_url)
+
+
 @login_required
 def client_add(request):
     form = ClientForm(request.POST or None)
@@ -350,6 +436,22 @@ def client_edit(request, pk: int):
         form.save()
         return redirect("clients_list")
     return render(request, "core/client_form.html", {"form": form, "title": "Edit Client"})
+
+
+@login_required
+@require_POST
+def client_delete(request, pk: int):
+    client = get_object_or_404(Client, pk=pk)
+    next_url = request.POST.get("next") or request.META.get("HTTP_REFERER") or reverse("clients_list")
+    if not next_url or not next_url.startswith("/"):
+        next_url = reverse("clients_list")
+    try:
+        client.delete()
+        messages.success(request, f"Client '{client.name}' deleted.")
+    except ProtectedError:
+        messages.error(request, "Cannot delete client with existing transactions.")
+    return redirect(next_url)
+
 
 @login_required
 def transaction_add(request):
@@ -371,13 +473,29 @@ def transaction_edit(request, pk: int):
 
 
 @login_required
+@require_POST
+def transaction_delete(request, pk: int):
+    tx = get_object_or_404(Transaction, pk=pk)
+    next_url = request.POST.get("next") or request.META.get("HTTP_REFERER") or reverse("transactions_list")
+    if not next_url or not next_url.startswith("/"):
+        next_url = reverse("transactions_list")
+    tx.delete()
+    messages.success(request, "Transaction deleted.")
+    return redirect(next_url)
+
+
+@login_required
 def card_history(request, pk: int):
     card = get_object_or_404(Card, pk=pk)
 
-    start_raw = request.GET.get("start") or ""
-    end_raw = request.GET.get("end") or ""
-    start_date = parse_date(start_raw) if start_raw else None
-    end_date = parse_date(end_raw) if end_raw else None
+    start_raw = (request.GET.get("start") or "").strip()
+    end_raw = (request.GET.get("end") or "").strip()
+    start_date = _parse_user_date(start_raw)
+    end_date = _parse_user_date(end_raw)
+    if start_date:
+        start_raw = _format_user_date(start_date)
+    if end_date:
+        end_raw = _format_user_date(end_date)
 
     tx_filter = {"card": card}
     wd_filter = {"card": card}
@@ -434,10 +552,14 @@ def card_history(request, pk: int):
     return render(request, "core/card_history.html", context)
 @login_required
 def payments_summary(request):
-    start_raw = request.GET.get("start") or ""
-    end_raw = request.GET.get("end") or ""
-    start_date = parse_date(start_raw) if start_raw else None
-    end_date = parse_date(end_raw) if end_raw else None
+    start_raw = (request.GET.get("start") or "").strip()
+    end_raw = (request.GET.get("end") or "").strip()
+    start_date = _parse_user_date(start_raw)
+    end_date = _parse_user_date(end_raw)
+    if start_date:
+        start_raw = _format_user_date(start_date)
+    if end_date:
+        end_raw = _format_user_date(end_date)
 
     txs = Transaction.objects.select_related("client").order_by("-timestamp")
     if start_date:

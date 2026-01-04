@@ -33,8 +33,42 @@
             <small style="color:#c00;">{{ field.errors|join:", " }}</small>
           {% endif %}
         </label>
+      {% elif field.name == "notes" %}
+        {% with has_value=field.value %}
+        <div class="notes-field{% if has_value or field.errors %} is-open{% endif %}" style="flex:1 1 100%;">
+          <div class="notes-header">
+            <span>{{ field.label }}</span>
+            <button type="button" class="notes-trigger" data-note-target="notes-{{ field.auto_id }}">Add note</button>
+          </div>
+          <div class="notes-collapse" id="notes-{{ field.auto_id }}">
+            {{ field }}
+            {% if field.errors %}
+              <small style="color:#c00;">{{ field.errors|join:", " }}</small>
+            {% endif %}
+          </div>
+        </div>
+        {% endwith %}
+      {% elif field.name == "timestamp" %}
+        <label style="display:flex; flex-direction:column; min-width:150px; flex:0.6;">
+          <span>{{ field.label }}{% if field.field.required %} *{% endif %}</span>
+          <div class="date-field">
+            {{ field }}
+            <button type="button" class="calendar-toggle" aria-label="Open calendar">&#128197;</button>
+          </div>
+          {% if field.errors %}
+            <small style="color:#c00;">{{ field.errors|join:", " }}</small>
+          {% endif %}
+        </label>
+      {% elif field.name == "amount_rub" or field.name == "amount_usd" %}
+        <label style="display:flex; flex-direction:column; min-width:130px; flex:0.45;">
+          <span>{{ field.label }}{% if field.field.required %} *{% endif %}</span>
+          {{ field }}
+          {% if field.errors %}
+            <small style="color:#c00;">{{ field.errors|join:", " }}</small>
+          {% endif %}
+        </label>
       {% else %}
-        <label style="display:flex; flex-direction:column; min-width:200px; flex:1;">
+        <label style="display:flex; flex-direction:column; min-width:140px; flex:0.6;">
           <span>{{ field.label }}{% if field.field.required %} *{% endif %}</span>
           {{ field }}
           {% if field.errors %}
@@ -51,7 +85,7 @@
 
 <datalist id="card-options">
   {% for card in cards %}
-    <option data-id="{{ card.id }}" value="{{ card.name }}"></option>
+    <option data-id="{{ card.id }}" value="{{ card.display_label }}"></option>
   {% endfor %}
 </datalist>
 <datalist id="client-options">
@@ -63,11 +97,17 @@
 <form method="get" class="filters section-card" style="margin-bottom:16px; display:flex; flex-wrap:wrap; gap:12px; align-items:flex-end;">
   <label style="display:flex; flex-direction:column;">
     <span>From</span>
-    <input type="date" name="start" value="{{ start }}">
+    <div class="date-field">
+      <input type="text" name="start" placeholder="dd/mm/yyyy" value="{{ start }}" autocomplete="off" inputmode="numeric" class="date-input js-date-input">
+      <button type="button" class="calendar-toggle" aria-label="Open calendar">&#128197;</button>
+    </div>
   </label>
   <label style="display:flex; flex-direction:column;">
     <span>To</span>
-    <input type="date" name="end" value="{{ end }}">
+    <div class="date-field">
+      <input type="text" name="end" placeholder="dd/mm/yyyy" value="{{ end }}" autocomplete="off" inputmode="numeric" class="date-input js-date-input">
+      <button type="button" class="calendar-toggle" aria-label="Open calendar">&#128197;</button>
+    </div>
   </label>
   <div>
     <button type="submit">Apply</button>
@@ -78,18 +118,25 @@
 <div class="table-card table-scroll">
 <table>
   <thead>
-    <tr><th>Time</th><th>Client</th><th>RUB</th><th>USD</th><th>Card</th><th>Rate</th><th>Edit</th></tr>
+    <tr><th>Time</th><th>Client</th><th>RUB</th><th>USD</th><th>Card</th><th>Rate</th><th>Actions</th></tr>
   </thead>
   <tbody>
     {% for t in page_obj %}
       <tr>
-        <td>{{ t.timestamp|date:"d.m.Y, H:i" }}</td>
+        <td>{{ t.timestamp|date:"d/m/Y, H:i" }}</td>
         <td>{{ t.client.name }}</td>
         <td>{{ t.amount_rub|spaced_number }}</td>
         <td>{{ t.amount_usd|spaced_number }}</td>
         <td>{{ t.card.name }}</td>
         <td>{{ t.rate|spaced_number }}</td>
-        <td><a href="/transactions/{{ t.id }}/edit/">Edit</a></td>
+        <td>
+          <a href="/transactions/{{ t.id }}/edit/">Edit</a>
+          <form method="post" action="{% url 'transaction_delete' t.id %}" style="display:inline;" onsubmit="return confirm('Delete this transaction?');">
+            {% csrf_token %}
+            <input type="hidden" name="next" value="{{ request.get_full_path }}">
+            <button type="submit" style="background:none;border:none;color:#c00;padding:0 0 0 8px;cursor:pointer;font:inherit;">Delete</button>
+          </form>
+        </td>
       </tr>
     {% empty %}
       <tr><td colspan="7">No transactions match the selected filters.</td></tr>
