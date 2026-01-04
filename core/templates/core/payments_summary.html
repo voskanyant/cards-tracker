@@ -1,0 +1,48 @@
+{% extends "core/base.html" %}
+{% load formatting %}
+{% block content %}
+<section class="section-card">
+  <div style="display:flex; flex-wrap:wrap; justify-content:space-between; gap:12px; align-items:center;">
+    <h2 style="margin:0;">Payments Summary</h2>
+    <form method="get" style="display:flex; gap:12px; flex-wrap:wrap; align-items:flex-end;">
+      <label style="display:flex; flex-direction:column;">
+        <span>From</span>
+        <input type="date" name="start" value="{{ start }}">
+      </label>
+      <label style="display:flex; flex-direction:column;">
+        <span>To</span>
+        <input type="date" name="end" value="{{ end }}">
+      </label>
+      <div>
+        <button type="submit">Apply</button>
+        <a href="/payments/" style="margin-left:8px;">Reset</a>
+      </div>
+    </form>
+  </div>
+
+  <div class="table-card table-scroll" style="margin-top:16px;">
+    <table>
+      <thead>
+        <tr>
+          <th>Date</th>
+          <th>Client</th>
+          <th class="num col-narrow">Received RUB</th>
+          <th class="num col-narrow">Received USD</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in rows %}
+          <tr>
+            <td>{{ row.date|date:"d.m.Y" }}</td>
+            <td>{{ row.client.name }}</td>
+            <td class="num">{{ row.rub|spaced_number }}</td>
+            <td class="num">{{ row.usd|spaced_number }}</td>
+          </tr>
+        {% empty %}
+          <tr><td colspan="4">No payments found for the selected range.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+{% endblock %}

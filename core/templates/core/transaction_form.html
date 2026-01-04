@@ -1,0 +1,30 @@
+{% extends "core/base.html" %}
+{% block content %}
+<h2>{{ title }}</h2>
+
+<form method="post" style="max-width:600px;">
+  {% csrf_token %}
+  {{ form.as_p }}
+  <button type="submit">Save</button>
+</form>
+
+<p><a href="/transactions/">Back to Transactions</a></p>
+
+<script>
+  // Auto-calc rate if both RUB & USD entered
+  const rub = document.querySelector('input[name="amount_rub"]');
+  const usd = document.querySelector('input[name="amount_usd"]');
+  const rate = document.querySelector('input[name="rate"]');
+
+  function calcRate() {
+    if (rub.value && usd.value && parseFloat(usd.value) !== 0) {
+      rate.value = (parseFloat(rub.value) / parseFloat(usd.value)).toFixed(4);
+    }
+  }
+
+  if (rub && usd && rate) {
+    rub.addEventListener("input", calcRate);
+    usd.addEventListener("input", calcRate);
+  }
+</script>
+{% endblock %}

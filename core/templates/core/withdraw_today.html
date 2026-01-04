@@ -1,0 +1,394 @@
+{% extends "core/base.html" %}
+{% load formatting %}
+{% block content %}
+
+<section class="section-card">
+    <div style="display:flex; flex-wrap:wrap; justify-content:space-between; gap:12px; align-items:center;">
+      <h2 style="margin:0;">Withdraw Today</h2>
+      <div style="display:flex; flex-wrap:wrap; gap:12px;">
+        <label style="display:flex; flex-direction:column; min-width:160px;">
+          <span>Work date</span>
+          <input id="workdate" type="date" value="{{ day|date:'Y-m-d' }}">
+        </label>
+        <label style="display:flex; flex-direction:column; min-width:220px;">
+          <span>Bank filter</span>
+          <div class="combo-wrapper">
+            <input type="hidden" id="bank-filter" value="{{ selected_bank }}">
+            <input type="text" class="combo-input" data-combo-list="withdraw-bank-options" placeholder="Start typing bank..." value="{{ selected_bank }}" autocomplete="off" autocorrect="off" autocapitalize="none" spellcheck="false">
+            <div class="combo-dropdown"></div>
+          </div>
+        </label>
+        <datalist id="withdraw-bank-options">
+          {% for bank in banks %}
+            <option data-id="{{ bank }}" value="{{ bank }}"></option>
+          {% endfor %}
+        </datalist>
+      </div>
+    </div>
+
+	  {% csrf_token %}
+
+  <div class="table-card table-scroll" style="margin-top:16px;">
+	  <table>
+		<thead>
+		  <tr>
+			<th class="col-card">Card</th>
+			<th>PIN</th>
+			<th class="num col-narrow">Should have</th>
+			<th>Full</th>
+			<th class="num col-narrow">Withdrawn</th>
+			<th class="num col-narrow">Commission</th>
+			<th class="num col-narrow">Remaining</th>
+			<th>Note</th>
+		  </tr>
+		</thead>
+
+
+
+		<tbody>
+		  {% for r in rows %}
+			<tr data-card-id="{{ r.card_id }}" data-should="{{ r.should_have|floatformat:'2' }}">
+			  <td class="col-card">{{ r.card_label }}</td>
+			  <td><b>{{ r.pin }}</b></td>
+			  <td class="num col-narrow"><b>{{ r.should_have|spaced_number }}</b></td>
+
+			  <td style="text-align:center;">
+				<input type="checkbox" class="full"
+					   {% if r.withdrawal and r.withdrawal.fully_withdrawn %}checked{% endif %}>
+			  </td>
+
+			  <td class="num col-narrow">
+				<input type="number" step="0.01" class="withdrawn"
+				   value="{% if r.withdrawal %}{{ r.withdrawal.withdrawn_rub|default:'' }}{% endif %}"
+				   {% if r.withdrawal and r.withdrawal.fully_withdrawn %}disabled{% endif %}>
+
+			  </td>
+
+			  <td class="num col-narrow">
+				<input type="number" step="0.01" class="commission"
+					value="{% if r.withdrawal %}{{ r.withdrawal.commission_rub|default:'' }}{% endif %}">
+
+			  </td>
+
+			  <td class="num col-narrow"><b class="remaining-value">{{ r.remaining|spaced_number }}</b></td>
+
+			  <td>
+				<input type="text" class="note note-input"
+					value="{% if r.withdrawal %}{{ r.withdrawal.note|default:'' }}{% endif %}">
+
+			  </td>
+			</tr>
+
+		  {% empty %}
+			<tr><td colspan="8">No cards to withdraw for this date.</td></tr>
+		  {% endfor %}
+		</tbody>
+		<tfoot>
+		  <tr>
+			<td colspan="2"><b>Totals</b></td>
+			<td class="num col-narrow"><b id="total-should">{{ totals.should|default:0|spaced_number }}</b></td>
+			<td></td>
+			<td class="num col-narrow"><b id="total-withdrawn">{{ totals.withdrawn|default:0|spaced_number }}</b></td>
+			<td class="num col-narrow"><b id="total-commission">{{ totals.commission|default:0|spaced_number }}</b></td>
+			<td class="num col-narrow"><b id="total-remaining">{{ totals.remaining|default:0|spaced_number }}</b></td>
+			<td></td>
+		  </tr>
+		</tfoot>
+	  </table>
+  </div>
+
+    <p style="margin-top:12px; color:var(--muted); font-size:0.9rem;">
+      Tip: edit withdrawals inline and they autosave instantly.
+    </p>
+</section>
+
+	<script>
+	  // --- CSRF ---
+	  function getCookie(name) {
+		const value = `; ${document.cookie}`;
+		const parts = value.split(`; ${name}=`);
+		if (parts.length === 2) return parts.pop().split(";").shift();
+	  }
+	  const csrftoken = getCookie("csrftoken");
+
+	  // --- Saving state ---
+	  let inFlight = 0;
+	  let pendingNavUrl = null;
+
+	  function setSavingText() {
+		let el = document.getElementById("saving-status");
+		if (!el) {
+		  el = document.createElement("div");
+		  el.id = "saving-status";
+		  el.style.margin = "8px 0";
+		  el.style.fontSize = "12px";
+		  document.body.querySelector("main")?.prepend(el);
+		}
+		el.textContent = inFlight > 0 ? "Saving..." : "";
+	  }
+
+	  function parseNumber(value) {
+		if (typeof value === "number") {
+		  return Number.isFinite(value) ? value : 0;
+		}
+		if (value === undefined || value === null) return 0;
+		const normalized = String(value).replace(/\s+/g, "").replace(",", ".");
+		const parsed = parseFloat(normalized);
+		return Number.isFinite(parsed) ? parsed : 0;
+	  }
+
+	  function formatNumber(value) {
+		const rounded = Math.round((value + Number.EPSILON) * 100) / 100;
+		let [intPart, fracPart] = rounded.toFixed(2).split(".");
+		const sign = intPart.startsWith("-") ? "-" : "";
+		intPart = intPart.replace("-", "");
+		intPart = intPart.replace(/\B(?=(\d{3})+(?!\d))/g, " ");
+		fracPart = fracPart.replace(/0+$/, "");
+		const formattedInt = `${sign}${intPart || "0"}`;
+		return fracPart ? `${formattedInt}.${fracPart}` : formattedInt;
+	  }
+
+	  function computeRowState(row) {
+		const should = parseNumber(row.dataset.should);
+		const fullEl = row.querySelector(".full");
+		const withdrawnEl = row.querySelector(".withdrawn");
+		const commissionEl = row.querySelector(".commission");
+
+		const full = fullEl?.checked ?? false;
+		if (withdrawnEl) {
+		  withdrawnEl.disabled = full;
+		}
+		const withdrawn = full ? should : parseNumber(withdrawnEl?.value);
+		const commission = parseNumber(commissionEl?.value);
+		let remaining = should - withdrawn - commission;
+		if (remaining < 0) remaining = 0;
+
+		const remainingEl = row.querySelector(".remaining-value");
+		if (remainingEl) {
+		  remainingEl.textContent = formatNumber(remaining);
+		}
+
+		return { should, withdrawn, commission, remaining };
+	  }
+
+	  function refreshTotals() {
+		const totals = { should: 0, withdrawn: 0, commission: 0, remaining: 0 };
+		document.querySelectorAll("tr[data-card-id]").forEach(row => {
+		  const state = computeRowState(row);
+		  totals.should += state.should;
+		  totals.withdrawn += state.withdrawn;
+		  totals.commission += state.commission;
+		  totals.remaining += state.remaining;
+		});
+
+		const map = {
+		  "total-should": totals.should,
+		  "total-withdrawn": totals.withdrawn,
+		  "total-commission": totals.commission,
+		  "total-remaining": totals.remaining,
+		};
+		Object.entries(map).forEach(([id, val]) => {
+		  const target = document.getElementById(id);
+		  if (target) {
+			target.textContent = formatNumber(val);
+		  }
+		});
+	  }
+
+	  async function autosave(row) {
+		const cardId = row.dataset.cardId;
+		const workdate = document.getElementById("workdate").value;
+
+		const fullEl = row.querySelector(".full");
+		const withdrawnEl = row.querySelector(".withdrawn");
+		const commissionEl = row.querySelector(".commission");
+		const noteEl = row.querySelector(".note");
+
+		const full = fullEl?.checked ?? false;
+		if (withdrawnEl) {
+		  withdrawnEl.disabled = full; // keeps UI aligned with server logic
+		}
+
+		const formData = new FormData();
+		formData.append("date", workdate);
+		formData.append("card_id", cardId);
+		formData.append("fully_withdrawn", full ? "true" : "false");
+		formData.append("withdrawn_rub", full ? "" : (withdrawnEl?.value ?? ""));
+		formData.append("commission_rub", commissionEl?.value ?? "");
+		formData.append("note", noteEl?.value ?? "");
+
+
+		inFlight++;
+		setSavingText();
+
+		try {
+		  // keepalive helps the request finish even if navigation starts
+		  const resp = await fetch("/withdraw/save/", {
+			method: "POST",
+			headers: { "X-CSRFToken": csrftoken },
+			body: formData,
+			keepalive: true
+		  });
+		  if (!resp.ok) throw new Error("Save failed: " + resp.status);
+		} catch (e) {
+		  alert("Autosave failed. Please try again.\n\n" + e);
+		} finally {
+		  inFlight--;
+		  setSavingText();
+
+		  // If user changed date while saving, navigate after all saves finish
+		  if (inFlight === 0 && pendingNavUrl) {
+			const url = pendingNavUrl;
+			pendingNavUrl = null;
+			window.location.href = url;
+		  }
+		}
+	  }
+
+	  // Debounce notes only
+	  let noteTimer = null;
+
+	  document.querySelectorAll("tr[data-card-id]").forEach(row => {
+		row.addEventListener("change", (e) => {
+		  refreshTotals();
+		  autosave(row);
+		});
+
+		row.addEventListener("input", (e) => {
+		  if (e.target.classList.contains("note")) {
+			clearTimeout(noteTimer);
+			noteTimer = setTimeout(() => autosave(row), 400);
+			return;
+		  }
+		  if (e.target.classList.contains("withdrawn") || e.target.classList.contains("commission")) {
+			refreshTotals();
+		  }
+		});
+	  });
+
+	  refreshTotals();
+
+	  // --- Date/bank filters: navigate ONLY after saves complete ---
+	  const wd = document.getElementById("workdate");
+	  const bankHidden = document.getElementById("bank-filter");
+	  const bankInput = document.getElementById("bank-input");
+	  const bankDropdown = bankInput?.parentElement?.querySelector(".combo-dropdown");
+	  const bankOptions = Array.from(document.querySelectorAll("#withdraw-bank-options option")).map(opt => ({
+		id: opt.dataset.id || opt.value,
+		label: opt.value
+	  }));
+
+	  function navigateWithFilters() {
+		const params = new URLSearchParams();
+		const d = wd?.value || "";
+		const bank = bankHidden?.value || "";
+		if (d) params.set("date", d);
+		if (bank) params.set("bank", bank);
+		const url = `/withdraw/?${params.toString()}`;
+
+		if (inFlight > 0) {
+		  pendingNavUrl = url; // wait until saves finish
+		} else {
+		  window.location.href = url;
+		}
+	  }
+
+	  if (wd) {
+		wd.addEventListener("change", navigateWithFilters);
+	  }
+	  if (bankHidden && bankInput && bankDropdown) {
+		const filterOptions = term => {
+		  const q = term.trim().toLowerCase();
+		  if (!q) return bankOptions.slice(0, 8);
+		  return bankOptions.filter(opt => opt.label.toLowerCase().includes(q)).slice(0, 8);
+		};
+
+		const findMatch = term => {
+		  const lowered = term.trim().toLowerCase();
+		  return bankOptions.find(opt => opt.label.toLowerCase() === lowered);
+		};
+
+		const updateDropdown = term => {
+		  const matches = filterOptions(term);
+		  bankDropdown.innerHTML = "";
+		  if (!matches.length) {
+			bankDropdown.style.display = "none";
+			return;
+		  }
+		  matches.forEach(opt => {
+			const btn = document.createElement("button");
+			btn.type = "button";
+			btn.textContent = opt.label;
+			btn.dataset.id = opt.id;
+			bankDropdown.appendChild(btn);
+		  });
+		  bankDropdown.style.display = "block";
+		  bankDropdown.querySelectorAll("button").forEach(btn => {
+			btn.addEventListener("click", () => {
+			  bankHidden.value = btn.dataset.id || "";
+			  bankInput.value = btn.textContent;
+			  bankDropdown.style.display = "none";
+			  navigateWithFilters();
+			});
+		  });
+		};
+
+		bankInput.addEventListener("focus", () => {
+		  updateDropdown(bankInput.value);
+		});
+
+		bankInput.addEventListener("input", () => {
+		  bankHidden.value = "";
+		  if (bankInput.value.trim() === "") {
+			bankDropdown.style.display = "none";
+			navigateWithFilters();
+		  } else {
+			updateDropdown(bankInput.value);
+		  }
+		});
+
+		document.addEventListener("click", (e) => {
+		  if (!bankInput.parentElement.contains(e.target)) {
+			bankDropdown.style.display = "none";
+		  }
+		});
+
+		bankInput.addEventListener("keydown", (e) => {
+		  if (e.key === "Enter") {
+			e.preventDefault();
+			const match = findMatch(bankInput.value);
+			if (match) {
+			  bankHidden.value = match.id;
+			  bankInput.value = match.label;
+			  bankDropdown.style.display = "none";
+			  navigateWithFilters();
+			}
+		  }
+		  if (e.key === "Escape") {
+			bankDropdown.style.display = "none";
+		  }
+		});
+
+		bankInput.addEventListener("blur", () => {
+		  setTimeout(() => {
+			const match = findMatch(bankInput.value);
+			if (match) {
+			  bankHidden.value = match.id;
+			  bankInput.value = match.label;
+			  navigateWithFilters();
+			} else if (bankInput.value.trim() === "") {
+			  bankHidden.value = "";
+			  navigateWithFilters();
+			} else {
+			  bankInput.value = bankHidden.value;
+			}
+			bankDropdown.style.display = "none";
+		  }, 100);
+		});
+	  }
+
+	</script>
+
+
+
+{% endblock %}

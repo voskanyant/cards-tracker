@@ -1,0 +1,340 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Cards Tracker</title>
+  <style>
+    :root {
+      --bg: #f5f6fa;
+      --surface: #ffffff;
+      --text: #0f172a;
+      --muted: #6b7280;
+      --primary: #0066ff;
+      --primary-dark: #004acc;
+      --border: #e2e8f0;
+      --radius: 14px;
+    }
+    * { box-sizing: border-box; }
+    body {
+      font-family: "Inter", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      margin: 0;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      line-height: 1.5;
+    }
+    nav {
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      padding: 12px 16px;
+      position: sticky;
+      top: 0;
+      z-index: 10;
+    }
+    nav .nav-inner {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      align-items: center;
+      justify-content: center;
+    }
+    nav a {
+      color: var(--muted);
+      text-decoration: none;
+      padding: 6px 12px;
+      border-radius: 999px;
+      font-weight: 600;
+      transition: color 0.2s, background 0.2s;
+    }
+    nav a:hover {
+      color: var(--primary);
+      background: rgba(0,102,255,0.08);
+    }
+    main {
+      padding: 16px;
+    }
+    .page {
+      max-width: 1100px;
+      margin: 0 auto;
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+    }
+    h1, h2, h3 {
+      margin: 0 0 10px;
+      font-weight: 700;
+    }
+    p {
+      margin: 0 0 12px;
+    }
+    .section-card {
+      background: var(--surface);
+      border-radius: var(--radius);
+      border: 1px solid var(--border);
+      padding: 16px;
+      box-shadow: 0 10px 30px rgba(15,23,42,0.05);
+    }
+    .form-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 16px;
+    }
+    label span {
+      font-size: 0.85rem;
+      font-weight: 500;
+      color: var(--muted);
+      margin-bottom: 6px;
+    }
+    input, select, textarea, button {
+      font: inherit;
+    }
+    input, select, textarea {
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 10px 12px;
+      background: #fff;
+      transition: border 0.2s, box-shadow 0.2s;
+      width: 100%;
+    }
+    input:focus, select:focus, textarea:focus {
+      outline: none;
+      border-color: var(--primary);
+      box-shadow: 0 0 0 3px rgba(0,102,255,0.15);
+    }
+    button {
+      border: none;
+      border-radius: 12px;
+      background: var(--primary);
+      color: #fff;
+      padding: 12px 18px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 0.2s, transform 0.2s;
+    }
+    button:hover {
+      background: var(--primary-dark);
+    }
+    button:active {
+      transform: translateY(1px);
+    }
+    .table-card {
+      background: var(--surface);
+      border-radius: var(--radius);
+      border: 1px solid var(--border);
+      box-shadow: 0 10px 30px rgba(15,23,42,0.05);
+      padding: 0;
+      overflow: hidden;
+    }
+    .table-scroll {
+      overflow-x: auto;
+    }
+    table {
+      border-collapse: collapse;
+      width: 100%;
+      min-width: 640px;
+    }
+    th, td {
+      padding: 12px 16px;
+      border-bottom: 1px solid var(--border);
+    }
+    th {
+      background: #f8fafc;
+      text-align: left;
+      font-size: 0.85rem;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      cursor: pointer;
+      user-select: none;
+      position: sticky;
+      top: 0;
+    }
+    tbody tr:hover {
+      background: rgba(15,23,42,0.02);
+    }
+    tfoot td {
+      background:#f8fafc;
+      font-weight:bold;
+    }
+    th[data-sort-dir="asc"]::after { content:" ^"; font-size:11px; color:#555; }
+    th[data-sort-dir="desc"]::after { content:" v"; font-size:11px; color:#555; }
+    .note-input {
+      min-width: 160px;
+    }
+    .col-card {
+      min-width: 240px;
+    }
+    .col-narrow {
+      width: 120px;
+    }
+    .pill {
+      display: inline-flex;
+      align-items: center;
+      padding: 4px 10px;
+      border-radius: 999px;
+      background: rgba(0,102,255,0.12);
+      color: var(--primary);
+      font-size: 0.8rem;
+      font-weight: 600;
+    }
+    .filters, .add-transaction form {
+      width: 100%;
+    }
+    .combo-input {
+      margin-top: 4px;
+    }
+    .combo-wrapper {
+      position: relative;
+      width: 100%;
+    }
+    .combo-dropdown {
+      position: absolute;
+      top: calc(100% + 6px);
+      left: 0;
+      background: #0f172a;
+      color: #fff;
+      border-radius: 12px;
+      min-width: 240px;
+      box-shadow: 0 15px 35px rgba(15, 23, 42, 0.35);
+      padding: 4px 0;
+      display: none;
+      z-index: 25;
+    }
+    .combo-dropdown button {
+      background: transparent;
+      border: none;
+      color: inherit;
+      width: 100%;
+      text-align: left;
+      padding: 10px 16px;
+      cursor: pointer;
+      font-size: 0.9rem;
+    }
+    .combo-dropdown button:hover,
+    .combo-dropdown button:focus {
+      background: rgba(255, 255, 255, 0.1);
+      outline: none;
+    }
+    @media (max-width: 720px) {
+      nav .nav-inner {
+        flex-direction: column;
+      }
+      table {
+        min-width: 540px;
+      }
+      .form-grid {
+        grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      }
+      .add-transaction form {
+        flex-direction: column;
+      }
+    }
+  </style>
+</head>
+<body>
+  <nav>
+    <div class="nav-inner">
+      <a href="/transactions/">Transactions</a>
+      <a href="/withdraw/">Withdraw</a>
+      <a href="/payments/">Payments</a>
+      <a href="/cards/">Cards</a>
+      <a href="/clients/">Clients</a>
+    </div>
+  </nav>
+
+  <main>
+    <div class="page">
+      {% block content %}{% endblock %}
+    </div>
+  </main>
+
+  <script>
+    (function () {
+      function parseValue(text) {
+        const raw = text ?? "";
+        if (!raw) return { type: "empty", value: "", raw };
+
+        const normalized = raw.replace(/\s+/g, "");
+        const asNumber = Number(normalized.replace(",", "."));
+        if (Number.isFinite(asNumber)) {
+          return { type: "number", value: asNumber, raw };
+        }
+
+        const asDate = Date.parse(raw);
+        if (!Number.isNaN(asDate)) {
+          return { type: "date", value: asDate, raw };
+        }
+
+        return { type: "string", value: raw.toLowerCase(), raw };
+      }
+
+      function compareParsed(a, b) {
+        if (a.type === b.type) {
+          if (a.value < b.value) return -1;
+          if (a.value > b.value) return 1;
+          return 0;
+        }
+        return a.raw.localeCompare(b.raw, undefined, { numeric: true, sensitivity: "base" });
+      }
+
+      function getCellValue(row, idx) {
+        const cell = row.cells[idx];
+        if (!cell) return "";
+        const field = cell.querySelector("input, select, textarea");
+        if (field) {
+          if (field.type === "checkbox" || field.type === "radio") {
+            return field.checked ? "1" : "0";
+          }
+          return field.value ?? "";
+        }
+        return cell.textContent.trim();
+      }
+
+      function sortTable(table, columnIndex, header) {
+        const body = table.tBodies.length ? table.tBodies[0] : table;
+        const rows = Array.from(body.rows).filter(row => row.cells.length);
+        if (!rows.length) return;
+
+        const nextDir = header.getAttribute("data-sort-dir") === "asc" ? "desc" : "asc";
+        table.querySelectorAll("th").forEach(th => {
+          th.removeAttribute("data-sort-dir");
+          th.removeAttribute("aria-sort");
+        });
+        header.setAttribute("data-sort-dir", nextDir);
+        header.setAttribute("aria-sort", nextDir);
+
+        const decorated = rows.map(row => ({
+          row,
+          value: parseValue(getCellValue(row, columnIndex))
+        }));
+
+        decorated.sort((a, b) => {
+          const result = compareParsed(a.value, b.value);
+          return nextDir === "asc" ? result : -result;
+        });
+
+        const frag = document.createDocumentFragment();
+        decorated.forEach(item => frag.appendChild(item.row));
+        if (body !== table) {
+          body.appendChild(frag);
+        } else {
+          table.appendChild(frag);
+        }
+      }
+
+      function makeTablesSortable() {
+        document.querySelectorAll("table").forEach(table => {
+          const head = table.tHead;
+          const headerRow = head ? head.rows[0] : table.rows[0];
+          if (!headerRow) return;
+          Array.from(headerRow.cells).forEach((th, idx) => {
+            th.addEventListener("click", () => sortTable(table, idx, th));
+          });
+        });
+      }
+
+      document.addEventListener("DOMContentLoaded", makeTablesSortable);
+    })();
+  </script>
+</body>
+</html>

@@ -1,0 +1,92 @@
+{% extends "core/base.html" %}
+{% load formatting %}
+{% block content %}
+<section class="section-card">
+  <div style="display:flex; flex-wrap:wrap; gap:16px; align-items:center; justify-content:space-between;">
+    <div>
+      <h2 style="margin:0;">{{ card.name }}</h2>
+      <p style="margin:4px 0; color:var(--muted);">
+        Bank: {{ card.bank|default:"N/A" }} • Number: {{ card.card_number|default:"N/A" }} • PIN: {{ card.pin|default:"-" }}
+      </p>
+    </div>
+    <a href="/cards/" class="pill">Back to cards</a>
+  </div>
+  <form method="get" style="margin-top:12px; display:flex; gap:12px; flex-wrap:wrap; align-items:flex-end;">
+    <label style="display:flex; flex-direction:column;">
+      <span>From</span>
+      <input type="date" name="start" value="{{ start }}">
+    </label>
+    <label style="display:flex; flex-direction:column;">
+      <span>To</span>
+      <input type="date" name="end" value="{{ end }}">
+    </label>
+    <div>
+      <button type="submit">Apply</button>
+      <a href="/cards/{{ card.id }}/history/" style="margin-left:8px;">Reset</a>
+    </div>
+  </form>
+  <div class="table-card" style="margin-top:16px;">
+    <table>
+      <thead>
+        <tr><th>Total received</th><th>Total withdrawn</th><th>Total commission</th><th>Balance</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>{{ received_total|spaced_number }}</td>
+          <td>{{ withdrawn_total|spaced_number }}</td>
+          <td>{{ commission_total|spaced_number }}</td>
+          <td>{{ balance_total|spaced_number }}</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section class="section-card">
+  <h3 style="margin-top:0;">Transactions</h3>
+  <div class="table-card table-scroll" style="margin-top:12px;">
+    <table>
+      <thead>
+        <tr><th>Time</th><th>Client</th><th>RUB</th><th>USD</th><th>Note</th></tr>
+      </thead>
+      <tbody>
+        {% for t in transactions %}
+          <tr>
+            <td>{{ t.timestamp|date:"d.m.Y, H:i" }}</td>
+            <td>{{ t.client.name }}</td>
+            <td>{{ t.amount_rub|spaced_number }}</td>
+            <td>{{ t.amount_usd|spaced_number }}</td>
+            <td>{{ t.notes|default:"-" }}</td>
+          </tr>
+        {% empty %}
+          <tr><td colspan="5">No transactions recorded for this card.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section class="section-card">
+  <h3 style="margin-top:0;">Withdrawals Log</h3>
+  <div class="table-card table-scroll" style="margin-top:12px;">
+    <table>
+      <thead>
+        <tr><th>Date</th><th>Status</th><th>Amount</th><th>Commission</th><th>Note</th></tr>
+      </thead>
+      <tbody>
+        {% for wd in withdrawals %}
+          <tr>
+            <td>{{ wd.date|date:"d.m.Y" }}</td>
+            <td>{% if wd.fully %}Full{% else %}Partial{% endif %}</td>
+            <td>{{ wd.amount|spaced_number }}</td>
+            <td>{{ wd.commission|spaced_number }}</td>
+            <td>{{ wd.note|default:"-" }}</td>
+          </tr>
+        {% empty %}
+          <tr><td colspan="5">No withdrawals logged for this card.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+{% endblock %}

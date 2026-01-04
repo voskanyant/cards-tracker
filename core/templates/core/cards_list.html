@@ -1,0 +1,97 @@
+{% extends "core/base.html" %}
+{% load formatting %}
+{% block content %}
+<section class="section-card">
+  <h2 style="margin-top:0;">Add Card</h2>
+  <form method="post" class="form-grid">
+    {% csrf_token %}
+    {{ form.non_field_errors }}
+    {% for field in form %}
+      <label>
+        <span>{{ field.label }}{% if field.field.required %} *{% endif %}</span>
+        {{ field }}
+        {% if field.errors %}
+          <small style="color:#c00;">{{ field.errors|join:", " }}</small>
+        {% endif %}
+      </label>
+    {% endfor %}
+    <div style="grid-column:1/-1; display:flex; justify-content:flex-end;">
+      <button type="submit">Save Card</button>
+    </div>
+  </form>
+</section>
+
+<section class="section-card">
+  <div style="display:flex; flex-wrap:wrap; justify-content:space-between; gap:12px; align-items:center;">
+    <h2 style="margin:0;">Cards</h2>
+    <form method="get" style="display:flex; gap:12px; flex-wrap:wrap; align-items:flex-end;">
+      <label style="display:flex; flex-direction:column;">
+        <span>From</span>
+        <input type="date" name="start" value="{{ start }}">
+      </label>
+      <label style="display:flex; flex-direction:column;">
+        <span>To</span>
+        <input type="date" name="end" value="{{ end }}">
+      </label>
+      <div>
+        <button type="submit">Apply</button>
+        <a href="/cards/" style="margin-left:8px;">Reset</a>
+      </div>
+    </form>
+  </div>
+
+  <div class="table-card table-scroll" style="margin-top:16px;">
+    <table>
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Bank</th>
+          <th>Number</th>
+          <th>PIN</th>
+          <th>Status</th>
+          <th class="num col-narrow">Received</th>
+          <th class="num col-narrow">Withdrawn</th>
+          <th class="num col-narrow">Commission</th>
+          <th class="num col-narrow">Balance</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for c in cards %}
+          <tr>
+            <td>{{ c.name }}</td>
+            <td>{{ c.bank }}</td>
+            <td>{{ c.card_number }}</td>
+            <td>{{ c.pin }}</td>
+            <td>{{ c.status }}</td>
+            <td class="num">{{ c.received_total|spaced_number }}</td>
+            <td class="num">{{ c.withdrawn_total|spaced_number }}</td>
+            <td class="num">{{ c.commission_total|spaced_number }}</td>
+            <td class="num">{{ c.balance_total|spaced_number }}</td>
+            <td style="display:flex; gap:6px; flex-wrap:wrap;">
+              <a href="/cards/{{ c.id }}/edit/">Edit</a>
+              <a href="/cards/{{ c.id }}/history/?start={{ start }}&end={{ end }}">History</a>
+            </td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <div class="table-card" style="margin-top:16px;">
+    <table>
+      <thead>
+        <tr><th>Total Received</th><th>Total Withdrawn</th><th>Total Commission</th><th>Balance</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>{{ overall.received|spaced_number }}</td>
+          <td>{{ overall.withdrawn|spaced_number }}</td>
+          <td>{{ overall.commission|spaced_number }}</td>
+          <td>{{ overall.balance|spaced_number }}</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+{% endblock %}

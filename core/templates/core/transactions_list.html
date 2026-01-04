@@ -1,0 +1,201 @@
+{% extends "core/base.html" %}
+{% load formatting %}
+{% block content %}
+<h2>Transactions</h2>
+
+<section class="add-transaction section-card">
+  <h3 style="margin-top:0;">Add Transaction</h3>
+  <form method="post" style="display:flex; flex-wrap:wrap; gap:16px;">
+    {% csrf_token %}
+    {{ form.non_field_errors }}
+    {% for field in form %}
+      {% if field.name == "card" %}
+        <label style="display:flex; flex-direction:column; min-width:200px; flex:1;">
+          <span>{{ field.label }}{% if field.field.required %} *{% endif %}</span>
+          <div class="combo-wrapper">
+            {{ field.as_hidden }}
+            <input type="text" class="combo-input" data-combo-target="{{ field.auto_id }}" data-combo-list="card-options" placeholder="Start typing card..." value="{{ card_lookup|dict_get:field.value }}">
+            <div class="combo-dropdown"></div>
+          </div>
+          {% if field.errors %}
+            <small style="color:#c00;">{{ field.errors|join:", " }}</small>
+          {% endif %}
+        </label>
+      {% elif field.name == "client" %}
+        <label style="display:flex; flex-direction:column; min-width:200px; flex:1;">
+          <span>{{ field.label }}{% if field.field.required %} *{% endif %}</span>
+          <div class="combo-wrapper">
+            {{ field.as_hidden }}
+            <input type="text" class="combo-input" data-combo-target="{{ field.auto_id }}" data-combo-list="client-options" placeholder="Start typing client..." value="{{ client_lookup|dict_get:field.value }}">
+            <div class="combo-dropdown"></div>
+          </div>
+          {% if field.errors %}
+            <small style="color:#c00;">{{ field.errors|join:", " }}</small>
+          {% endif %}
+        </label>
+      {% else %}
+        <label style="display:flex; flex-direction:column; min-width:200px; flex:1;">
+          <span>{{ field.label }}{% if field.field.required %} *{% endif %}</span>
+          {{ field }}
+          {% if field.errors %}
+            <small style="color:#c00;">{{ field.errors|join:", " }}</small>
+          {% endif %}
+        </label>
+      {% endif %}
+    {% endfor %}
+    <div style="align-self:flex-end;">
+      <button type="submit">Save</button>
+    </div>
+  </form>
+</section>
+
+<datalist id="card-options">
+  {% for card in cards %}
+    <option data-id="{{ card.id }}" value="{{ card.name }}"></option>
+  {% endfor %}
+</datalist>
+<datalist id="client-options">
+  {% for client in clients %}
+    <option data-id="{{ client.id }}" value="{{ client.name }}"></option>
+  {% endfor %}
+</datalist>
+
+<form method="get" class="filters section-card" style="margin-bottom:16px; display:flex; flex-wrap:wrap; gap:12px; align-items:flex-end;">
+  <label style="display:flex; flex-direction:column;">
+    <span>From</span>
+    <input type="date" name="start" value="{{ start }}">
+  </label>
+  <label style="display:flex; flex-direction:column;">
+    <span>To</span>
+    <input type="date" name="end" value="{{ end }}">
+  </label>
+  <div>
+    <button type="submit">Apply</button>
+    <a href="/transactions/" style="margin-left:8px;">Reset</a>
+  </div>
+</form>
+
+<div class="table-card table-scroll">
+<table>
+  <thead>
+    <tr><th>Time</th><th>Client</th><th>RUB</th><th>USD</th><th>Card</th><th>Rate</th><th>Edit</th></tr>
+  </thead>
+  <tbody>
+    {% for t in page_obj %}
+      <tr>
+        <td>{{ t.timestamp|date:"d.m.Y, H:i" }}</td>
+        <td>{{ t.client.name }}</td>
+        <td>{{ t.amount_rub|spaced_number }}</td>
+        <td>{{ t.amount_usd|spaced_number }}</td>
+        <td>{{ t.card.name }}</td>
+        <td>{{ t.rate|spaced_number }}</td>
+        <td><a href="/transactions/{{ t.id }}/edit/">Edit</a></td>
+      </tr>
+    {% empty %}
+      <tr><td colspan="7">No transactions match the selected filters.</td></tr>
+    {% endfor %}
+  </tbody>
+</table>
+</div>
+
+{% if page_obj.has_other_pages %}
+  <div class="pagination" style="margin-top:16px; display:flex; gap:8px; flex-wrap:wrap;">
+    {% if page_obj.has_previous %}
+      <a href="?{% if start %}start={{ start }}&{% endif %}{% if end %}end={{ end }}&{% endif %}page={{ page_obj.previous_page_number }}">« Prev</a>
+    {% endif %}
+    <span>Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}</span>
+    {% if page_obj.has_next %}
+      <a href="?{% if start %}start={{ start }}&{% endif %}{% if end %}end={{ end }}&{% endif %}page={{ page_obj.next_page_number }}">Next »</a>
+    {% endif %}
+  </div>
+{% endif %}
+<script>
+  (function () {
+    const cache = {};
+
+    function getOptions(listId) {
+      if (!cache[listId]) {
+        const listEl = document.getElementById(listId);
+        cache[listId] = listEl
+          ? Array.from(listEl.querySelectorAll("option")).map(opt => ({
+              id: opt.dataset.id,
+              label: opt.value
+            }))
+          : [];
+      }
+      return cache[listId];
+    }
+
+    function renderDropdown(dropdown, options, hidden, input) {
+      dropdown.innerHTML = "";
+      if (!options.length) {
+        dropdown.style.display = "none";
+        return;
+      }
+      options.forEach(opt => {
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.textContent = opt.label;
+        btn.dataset.id = opt.id;
+        dropdown.appendChild(btn);
+      });
+      dropdown.style.display = "block";
+      dropdown.querySelectorAll("button").forEach(btn => {
+        btn.addEventListener("click", () => {
+          hidden.value = btn.dataset.id || "";
+          input.value = btn.textContent;
+          dropdown.style.display = "none";
+        });
+      });
+    }
+
+    document.querySelectorAll(".combo-wrapper").forEach(wrapper => {
+      const input = wrapper.querySelector(".combo-input");
+      const hidden = wrapper.querySelector("input[type='hidden']");
+      const dropdown = wrapper.querySelector(".combo-dropdown");
+      if (!input || !hidden || !dropdown) return;
+      const listId = input.dataset.comboList;
+      if (!listId) return;
+
+      const allOptions = getOptions(listId);
+
+      function syncFromHidden() {
+        if (!hidden.value) return;
+        const match = allOptions.find(opt => opt.id === hidden.value);
+        if (match) input.value = match.label;
+      }
+
+      function filterOptions(term) {
+        const t = term.trim().toLowerCase();
+        if (!t) {
+          return allOptions.slice(0, 8);
+        }
+        return allOptions.filter(opt => opt.label.toLowerCase().includes(t)).slice(0, 8);
+      }
+
+      input.addEventListener("focus", () => {
+        renderDropdown(dropdown, filterOptions(input.value), hidden, input);
+      });
+
+      input.addEventListener("input", () => {
+        hidden.value = "";
+        renderDropdown(dropdown, filterOptions(input.value), hidden, input);
+      });
+
+      input.addEventListener("keydown", (e) => {
+        if (e.key === "Escape") {
+          dropdown.style.display = "none";
+        }
+      });
+
+      document.addEventListener("click", (e) => {
+        if (!wrapper.contains(e.target)) {
+          dropdown.style.display = "none";
+        }
+      });
+
+      syncFromHidden();
+    });
+  })();
+</script>
+{% endblock %}
