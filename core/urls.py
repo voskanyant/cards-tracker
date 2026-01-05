@@ -12,6 +12,7 @@ urlpatterns = [
 
 
     path("clients/", views.clients_list, name="clients_list"),
+    path("clients/search/", views.clients_search, name="clients_search"),
     path("clients/add/", views.client_add, name="client_add"),
     path("clients/<int:pk>/edit/", views.client_edit, name="client_edit"),
     path("clients/<int:pk>/delete/", views.client_delete, name="client_delete"),

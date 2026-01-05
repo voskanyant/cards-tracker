@@ -38,15 +38,23 @@
 </section>
 
 <section class="section-card">
-  <h2 style="margin:0;">Clients</h2>
+  <div style="display:flex; flex-direction:column; gap:12px;">
+    <h2 style="margin:0;">Clients</h2>
+    <form method="get" style="display:flex; gap:8px; flex:1; flex-wrap:wrap; align-items:center;">
+      <input type="text" name="q" placeholder="Search clients..." value="{{ query }}" style="width:100%;">
+      {% if query %}
+        <a href="/clients/" style="margin-left:4px;">Reset</a>
+      {% endif %}
+    </form>
+  </div>
 
   <div class="table-card table-scroll" style="margin-top:16px;">
     <table>
       <thead>
         <tr><th>Name</th><th>Status</th><th>Actions</th></tr>
       </thead>
-      <tbody>
-        {% for c in clients %}
+      <tbody data-initial-html>
+        {% for c in page_obj %}
           <tr>
             <td>{{ c.name }}</td>
             <td>{{ c.status }}</td>
@@ -59,9 +67,141 @@
               </form>
             </td>
           </tr>
+        {% empty %}
+          <tr><td colspan="3">No clients yet.</td></tr>
         {% endfor %}
       </tbody>
     </table>
   </div>
+
+  {% if page_obj.has_other_pages %}
+    <div class="pagination" style="margin-top:16px; display:flex; gap:8px; flex-wrap:wrap; align-items:center;">
+      {% if page_obj.has_previous %}
+        <a href="?{% if query %}q={{ query }}&{% endif %}page={{ page_obj.previous_page_number }}">Prev</a>
+      {% endif %}
+      {% for num in page_obj.paginator.page_range %}
+        {% if num == page_obj.number %}
+          <span style="padding:4px 8px; border-radius:8px; background:#e2e8f0; font-weight:600;">{{ num }}</span>
+        {% else %}
+          <a href="?{% if query %}q={{ query }}&{% endif %}page={{ num }}" style="padding:4px 8px;">{{ num }}</a>
+        {% endif %}
+      {% endfor %}
+      {% if page_obj.has_next %}
+        <a href="?{% if query %}q={{ query }}&{% endif %}page={{ page_obj.next_page_number }}">Next</a>
+      {% endif %}
+    </div>
+  {% endif %}
 </section>
+<script>
+  (function () {
+    const input = document.querySelector("input[name='q']");
+    const resetLink = document.querySelector("form[method='get'] a[href='/clients/']");
+    const tbody = document.querySelector("table tbody");
+    const pagination = document.querySelector(".pagination");
+    const initialBody = tbody ? tbody.innerHTML : "";
+    const initialPagination = pagination ? pagination.innerHTML : "";
+    const initialPaginationDisplay = pagination ? pagination.style.display : "";
+    let controller = null;
+    if (!input) return;
+
+    function escapeHtml(value) {
+      return String(value || "")
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#039;");
+    }
+
+    function getCookie(name) {
+      const value = `; ${document.cookie}`;
+      const parts = value.split(`; ${name}=`);
+      if (parts.length === 2) {
+        return parts.pop().split(";").shift();
+      }
+      return "";
+    }
+
+    function setUrlQuery(term) {
+      const params = new URLSearchParams(window.location.search);
+      if (term) {
+        params.set("q", term);
+      } else {
+        params.delete("q");
+      }
+      params.delete("page");
+      const query = params.toString();
+      const url = query ? `${window.location.pathname}?${query}` : window.location.pathname;
+      window.history.replaceState({}, "", url);
+    }
+
+    function renderRows(items) {
+      if (!tbody) return;
+      if (!items.length) {
+        tbody.innerHTML = "<tr><td colspan=\"3\">No matching clients.</td></tr>";
+        return;
+      }
+      const csrf = getCookie("csrftoken");
+      const nextValue = window.location.pathname + window.location.search;
+      tbody.innerHTML = items
+        .map(item => {
+          const id = escapeHtml(item.id);
+          const name = escapeHtml(item.name);
+          const status = escapeHtml(item.status);
+          return `
+            <tr>
+              <td>${name}</td>
+              <td>${status}</td>
+              <td style="display:flex; gap:6px; flex-wrap:wrap; align-items:center;">
+                <a href="/clients/${id}/edit/">Edit</a>
+                <form method="post" action="/clients/${id}/delete/" style="display:inline;" onsubmit="return confirm('Delete this client?');">
+                  <input type="hidden" name="csrfmiddlewaretoken" value="${csrf}">
+                  <input type="hidden" name="next" value="${escapeHtml(nextValue)}">
+                  <button type="submit" style="background:none;border:none;color:#c00;padding:0;margin:0;cursor:pointer;font:inherit;">Delete</button>
+                </form>
+              </td>
+            </tr>
+          `;
+        })
+        .join("");
+    }
+
+    function togglePagination(show) {
+      if (!pagination) return;
+      pagination.style.display = show ? initialPaginationDisplay || "" : "none";
+    }
+
+    function restoreInitial() {
+      if (tbody) tbody.innerHTML = initialBody;
+      if (pagination) pagination.innerHTML = initialPagination;
+      togglePagination(true);
+    }
+
+    function applySearch() {
+      const term = input.value.trim();
+      if (resetLink) {
+        resetLink.style.display = term ? "" : "none";
+      }
+      setUrlQuery(term);
+      if (!term) {
+        restoreInitial();
+        return;
+      }
+      togglePagination(false);
+      if (controller) controller.abort();
+      controller = new AbortController();
+      fetch(`/clients/search/?q=${encodeURIComponent(term)}`, { signal: controller.signal })
+        .then(resp => resp.ok ? resp.json() : { results: [] })
+        .then(data => renderRows(data.results || []))
+        .catch(() => {});
+    }
+
+    let timer;
+    input.addEventListener("input", () => {
+      window.clearTimeout(timer);
+      timer = window.setTimeout(applySearch, 200);
+    });
+    applySearch();
+  })();
+</script>
 {% endblock %}

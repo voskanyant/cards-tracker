@@ -349,11 +349,30 @@ def cards_list(request):
 @login_required
 def clients_list(request):
     clients = Client.objects.all().order_by("name")
+    query = (request.GET.get("q") or "").strip()
+    if query:
+        clients = clients.filter(name__icontains=query)
     form = ClientForm(request.POST or None)
     if request.method == "POST" and form.is_valid():
         form.save()
         return redirect("clients_list")
-    return render(request, "core/clients_list.html", {"clients": clients, "form": form})
+    paginator = Paginator(clients, 50)
+    page_number = request.GET.get("page")
+    page_obj = paginator.get_page(page_number)
+    return render(
+        request,
+        "core/clients_list.html",
+        {"page_obj": page_obj, "form": form, "query": query},
+    )
+
+@login_required
+def clients_search(request):
+    query = (request.GET.get("q") or "").strip()
+    if not query:
+        return JsonResponse({"results": []})
+    clients = Client.objects.filter(name__icontains=query).order_by("name")
+    data = [{"id": c.id, "name": c.name, "status": c.status} for c in clients]
+    return JsonResponse({"results": data})
 
 
 @login_required
