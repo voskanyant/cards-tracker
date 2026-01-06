@@ -39,13 +39,24 @@
 
 <section class="section-card">
   <div style="display:flex; flex-direction:column; gap:12px;">
-    <h2 style="margin:0;">Clients</h2>
-    <form method="get" style="display:flex; gap:8px; flex:1; flex-wrap:wrap; align-items:center;">
-      <input type="text" name="q" placeholder="Search clients..." value="{{ query }}" style="width:100%;">
-      {% if query %}
-        <a href="/clients/" style="margin-left:4px;">Reset</a>
-      {% endif %}
-    </form>
+    <div style="display:flex; flex-wrap:wrap; justify-content:space-between; gap:12px; align-items:center;">
+      <h2 style="margin:0;">Clients</h2>
+      <a class="clients-export" href="/clients/export/{% if query %}?q={{ query|urlencode }}{% endif %}">Export CSV</a>
+    </div>
+    <div class="clients-controls">
+      <label class="clients-search" style="display:flex; flex-direction:column;">
+        <span>Search</span>
+        <input type="text" name="q" placeholder="Search clients..." value="{{ query }}">
+      </label>
+      <label class="clients-per-page" style="display:flex; flex-direction:column;">
+        <span>Per page</span>
+        <select name="per_page">
+          {% for option in per_page_choices %}
+            <option value="{{ option }}" {% if option == per_page %}selected{% endif %}>{{ option }}</option>
+          {% endfor %}
+        </select>
+      </label>
+    </div>
   </div>
 
   <div class="table-card table-scroll" style="margin-top:16px;">
@@ -77,17 +88,21 @@
   {% if page_obj.has_other_pages %}
     <div class="pagination" style="margin-top:16px; display:flex; gap:8px; flex-wrap:wrap; align-items:center;">
       {% if page_obj.has_previous %}
-        <a href="?{% if query %}q={{ query }}&{% endif %}page={{ page_obj.previous_page_number }}">Prev</a>
+        <a href="?{% if query %}q={{ query|urlencode }}&{% endif %}per_page={{ per_page }}&page={{ page_obj.previous_page_number }}">Prev</a>
       {% endif %}
-      {% for num in page_obj.paginator.page_range %}
-        {% if num == page_obj.number %}
-          <span style="padding:4px 8px; border-radius:8px; background:#e2e8f0; font-weight:600;">{{ num }}</span>
+      {% for num in page_items %}
+        {% if num %}
+          {% if num == page_obj.number %}
+            <span style="padding:4px 8px; border-radius:8px; background:#e2e8f0; font-weight:600;">{{ num }}</span>
+          {% else %}
+            <a href="?{% if query %}q={{ query|urlencode }}&{% endif %}per_page={{ per_page }}&page={{ num }}" style="padding:4px 8px;">{{ num }}</a>
+          {% endif %}
         {% else %}
-          <a href="?{% if query %}q={{ query }}&{% endif %}page={{ num }}" style="padding:4px 8px;">{{ num }}</a>
+          <span style="padding:4px 6px; color:var(--muted);">...</span>
         {% endif %}
       {% endfor %}
       {% if page_obj.has_next %}
-        <a href="?{% if query %}q={{ query }}&{% endif %}page={{ page_obj.next_page_number }}">Next</a>
+        <a href="?{% if query %}q={{ query|urlencode }}&{% endif %}per_page={{ per_page }}&page={{ page_obj.next_page_number }}">Next</a>
       {% endif %}
     </div>
   {% endif %}
@@ -95,9 +110,11 @@
 <script>
   (function () {
     const input = document.querySelector("input[name='q']");
-    const resetLink = document.querySelector("form[method='get'] a[href='/clients/']");
     const tbody = document.querySelector("table tbody");
     const pagination = document.querySelector(".pagination");
+    const perPageSelect = document.querySelector("select[name='per_page']");
+    const controls = document.querySelector(".clients-controls");
+    const exportLink = document.querySelector("a[href^='/clients/export/']");
     const initialBody = tbody ? tbody.innerHTML : "";
     const initialPagination = pagination ? pagination.innerHTML : "";
     const initialPaginationDisplay = pagination ? pagination.style.display : "";
@@ -128,6 +145,9 @@
         params.set("q", term);
       } else {
         params.delete("q");
+      }
+      if (perPageSelect) {
+        params.set("per_page", perPageSelect.value);
       }
       params.delete("page");
       const query = params.toString();
@@ -171,16 +191,22 @@
       pagination.style.display = show ? initialPaginationDisplay || "" : "none";
     }
 
+    function toggleControls(show) {
+      if (!controls) return;
+      controls.style.display = show ? "" : "none";
+    }
+
     function restoreInitial() {
       if (tbody) tbody.innerHTML = initialBody;
       if (pagination) pagination.innerHTML = initialPagination;
       togglePagination(true);
+      toggleControls(true);
     }
 
     function applySearch() {
       const term = input.value.trim();
-      if (resetLink) {
-        resetLink.style.display = term ? "" : "none";
+      if (exportLink) {
+        exportLink.href = term ? `/clients/export/?q=${encodeURIComponent(term)}` : "/clients/export/";
       }
       setUrlQuery(term);
       if (!term) {
@@ -188,6 +214,7 @@
         return;
       }
       togglePagination(false);
+      toggleControls(false);
       if (controller) controller.abort();
       controller = new AbortController();
       fetch(`/clients/search/?q=${encodeURIComponent(term)}`, { signal: controller.signal })
@@ -201,6 +228,15 @@
       window.clearTimeout(timer);
       timer = window.setTimeout(applySearch, 200);
     });
+    if (perPageSelect) {
+      perPageSelect.addEventListener("change", () => {
+        const params = new URLSearchParams(window.location.search);
+        params.set("per_page", perPageSelect.value);
+        params.delete("page");
+        const query = params.toString();
+        window.location.href = query ? `${window.location.pathname}?${query}` : window.location.pathname;
+      });
+    }
     applySearch();
   })();
 </script>

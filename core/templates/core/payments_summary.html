@@ -2,9 +2,12 @@
 {% load formatting %}
 {% block content %}
 <section class="section-card">
-  <div style="display:flex; flex-wrap:wrap; justify-content:space-between; gap:12px; align-items:center;">
-    <h2 style="margin:0;">Payments Summary</h2>
-    <form method="get" style="display:flex; gap:12px; flex-wrap:wrap; align-items:flex-end;">
+  <div style="display:flex; flex-direction:column; gap:12px;">
+    <div style="display:flex; flex-wrap:wrap; justify-content:space-between; gap:12px; align-items:center;">
+      <h2 style="margin:0;">Payments Summary</h2>
+      <a href="/payments/export/{% if start or end or query %}?{% endif %}{% if start %}start={{ start|urlencode }}{% if end or query %}&{% endif %}{% endif %}{% if end %}end={{ end|urlencode }}{% if query %}&{% endif %}{% endif %}{% if query %}q={{ query|urlencode }}{% endif %}">Export CSV</a>
+    </div>
+    <form method="get" style="display:flex; gap:12px; flex-wrap:wrap; align-items:flex-end; width:100%;">
       <label style="display:flex; flex-direction:column;">
         <span>From</span>
         <div class="date-field">
@@ -19,11 +22,11 @@
           <button type="button" class="calendar-toggle" aria-label="Open calendar">&#128197;</button>
         </div>
       </label>
-  <div>
-    <button type="submit">Apply</button>
-    <a href="/payments/?clear=1" style="margin-left:8px;">Reset</a>
-  </div>
-</form>
+      <label style="display:flex; flex-direction:column; min-width:220px; flex:1;">
+        <span>Search</span>
+        <input type="text" name="q" placeholder="Search client..." value="{{ query }}">
+      </label>
+    </form>
   </div>
 
   <div class="table-card table-scroll" style="margin-top:16px;">
@@ -32,8 +35,8 @@
         <tr>
           <th>Date</th>
           <th>Client</th>
-          <th class="num col-narrow">Received RUB</th>
-          <th class="num col-narrow">Received USD</th>
+          <th class="num col-narrow">Received RUB ₽</th>
+          <th class="num col-narrow">Received USD $</th>
         </tr>
       </thead>
       <tbody>
@@ -41,8 +44,8 @@
           <tr>
             <td>{{ row.date|date:"d/m/Y" }}</td>
             <td>{{ row.client.name }}</td>
-            <td class="num">{{ row.rub|spaced_number }}</td>
-            <td class="num">{{ row.usd|spaced_number }}</td>
+            <td class="num">{{ row.rub|spaced_number }} ₽</td>
+            <td class="num">{{ row.usd|spaced_number }} $</td>
           </tr>
         {% empty %}
           <tr><td colspan="4">No payments found for the selected range.</td></tr>
@@ -51,4 +54,120 @@
     </table>
   </div>
 </section>
+<script>
+  (function () {
+    const searchInput = document.querySelector("input[name='q']");
+    const tbody = document.querySelector(".table-card table tbody");
+    if (!searchInput || !tbody) return;
+
+    const initialBody = tbody.innerHTML;
+    let controller = null;
+    let timer;
+
+    function escapeHtml(value) {
+      return String(value || "")
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#039;");
+    }
+
+    function getValue(selector) {
+      const el = document.querySelector(selector);
+      return el ? el.value.trim() : "";
+    }
+
+    function buildParams(includeQuery) {
+      const params = new URLSearchParams();
+      const start = getValue("input[name='start']");
+      const end = getValue("input[name='end']");
+      const query = includeQuery ? searchInput.value.trim() : "";
+      if (start) params.set("start", start);
+      if (end) params.set("end", end);
+      if (query) params.set("q", query);
+      return params;
+    }
+
+    function renderRows(items) {
+      if (!items.length) {
+        tbody.innerHTML = "<tr><td colspan=\"4\">No payments found for the selected range.</td></tr>";
+        return;
+      }
+      tbody.innerHTML = items
+        .map(row => {
+          const date = escapeHtml(row.date);
+          const client = escapeHtml(row.client);
+          const rub = escapeHtml(row.rub);
+          const usd = escapeHtml(row.usd);
+          return `
+            <tr>
+              <td>${date}</td>
+              <td>${client}</td>
+              <td class="num">${rub} ₽</td>
+              <td class="num">${usd} $</td>
+            </tr>
+          `;
+        })
+        .join("");
+    }
+
+    function restoreInitial() {
+      tbody.innerHTML = initialBody;
+    }
+
+    function applyFilters() {
+      const start = getValue("input[name='start']");
+      const end = getValue("input[name='end']");
+      const term = searchInput.value.trim();
+      const hasFilters = Boolean(start || end || term);
+      if (!hasFilters) {
+        restoreInitial();
+        return;
+      }
+      if (controller) controller.abort();
+      controller = new AbortController();
+      const params = buildParams(true);
+      fetch(`/payments/search/?${params.toString()}`, { signal: controller.signal })
+        .then(resp => resp.ok ? resp.json() : { results: [] })
+        .then(data => renderRows(data.results || []))
+        .catch(() => {});
+    }
+
+    searchInput.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") {
+        e.preventDefault();
+      }
+    });
+    searchInput.addEventListener("input", () => {
+      window.clearTimeout(timer);
+      timer = window.setTimeout(applyFilters, 200);
+    });
+    const startInput = document.querySelector("input[name='start']");
+    const endInput = document.querySelector("input[name='end']");
+    if (startInput) {
+      startInput.addEventListener("change", applyFilters);
+      startInput.addEventListener("input", () => {
+        if (!startInput.value.trim()) {
+          applyFilters();
+        }
+      });
+    }
+    if (endInput) {
+      endInput.addEventListener("change", applyFilters);
+      endInput.addEventListener("input", () => {
+        if (!endInput.value.trim()) {
+          applyFilters();
+        }
+      });
+    }
+    document.addEventListener("click", (event) => {
+      const target = event.target;
+      if (target && target.matches("button[data-action='clear']")) {
+        setTimeout(applyFilters, 0);
+      }
+    });
+    applyFilters();
+  })();
+</script>
 {% endblock %}

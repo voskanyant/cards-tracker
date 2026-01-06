@@ -1,15 +1,16 @@
 from datetime import date, timedelta, datetime, time
-from decimal import Decimal
+from decimal import Decimal, ROUND_DOWN, InvalidOperation
 from collections import defaultdict
+import csv
 
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.paginator import Paginator
-from django.db.models import Sum
+from django.db.models import Sum, Q
 from django.db.models.deletion import ProtectedError
 from django.shortcuts import render
 from django.utils.dateparse import parse_date
-from django.http import JsonResponse
+from django.http import JsonResponse, HttpResponse
 from django.views.decorators.http import require_POST
 from django.utils import timezone
 from django.shortcuts import get_object_or_404, redirect
@@ -19,6 +20,61 @@ from .models import Card, CardGroup, Client, Transaction, Withdrawal
 
 DATE_DISPLAY_FORMAT = "%d/%m/%Y"
 DATE_PARSE_FORMATS = ["%d/%m/%Y", "%Y-%m-%d"]
+PER_PAGE_CHOICES = [10, 25, 50, 100]
+
+
+def _parse_per_page(raw, default=50):
+    try:
+        value = int(raw)
+    except (TypeError, ValueError):
+        return default
+    return value if value in PER_PAGE_CHOICES else default
+
+
+def _pagination_items(page_obj, window=2):
+    total = page_obj.paginator.num_pages
+    current = page_obj.number
+    if total <= 1:
+        return []
+    start = max(2, current - window)
+    end = min(total - 1, current + window)
+    items = [1]
+    if start > 2:
+        items.append(None)
+    items.extend(range(start, end + 1))
+    if end < total - 1:
+        items.append(None)
+    if total > 1:
+        items.append(total)
+    return items
+
+
+def _format_spaced_number(value):
+    if value in (None, ""):
+        return ""
+    try:
+        dec = Decimal(value)
+    except Exception:
+        try:
+            dec = Decimal(str(value))
+        except Exception:
+            return str(value)
+    quantized = dec.quantize(Decimal("0.01"), rounding=ROUND_DOWN)
+    raw = format(quantized, "f").rstrip("0").rstrip(".")
+    if raw == "":
+        raw = "0"
+    sign = "-" if raw.startswith("-") else ""
+    digits = raw[1:] if sign else raw
+    int_part, dot, frac_part = digits.partition(".")
+    groups = []
+    while int_part:
+        groups.append(int_part[-3:])
+        int_part = int_part[:-3]
+    spaced = " ".join(reversed(groups)) if groups else "0"
+    frac_part = frac_part.rstrip("0")
+    if frac_part:
+        return f"{sign}{spaced}.{frac_part}"
+    return f"{sign}{spaced}"
 
 
 def _withdrawal_actual_amount(wd, cache=None):
@@ -34,25 +90,27 @@ def _withdrawal_actual_amount(wd, cache=None):
 
 def _closing_before(card: Card, day: date) -> Decimal:
     """
-    Remaining balance carried into 'day' = last (should_have - withdrawn - commission)
-    saved in Withdrawals before 'day'. If none, 0.
+    Remaining balance carried into 'day' = total received since the last
+    fully-withdrawn day minus withdrawn and commission in that period.
     """
-    last = (
-        Withdrawal.objects.filter(card=card, date__lt=day)
+    last_full = (
+        Withdrawal.objects.filter(card=card, date__lt=day, fully_withdrawn=True)
         .order_by("-date")
         .first()
     )
-    if not last:
-        return Decimal("0")
+    start_date = last_full.date + timedelta(days=1) if last_full else None
 
-    # compute last day's remaining:
-    should = _should_have(card, last.date)
-    if last.fully_withdrawn:
-        withdrawn = should
-    else:
-        withdrawn = last.withdrawn_rub or Decimal("0")
-    commission = last.commission_rub or Decimal("0")
-    remaining = should - withdrawn - commission
+    txs = Transaction.objects.filter(card=card, timestamp__date__lt=day)
+    wds = Withdrawal.objects.filter(card=card, date__lt=day, fully_withdrawn=False)
+    if start_date:
+        txs = txs.filter(timestamp__date__gte=start_date)
+        wds = wds.filter(date__gte=start_date)
+
+    received = txs.aggregate(total=Sum("amount_rub"))["total"] or Decimal("0")
+    withdrawn = wds.aggregate(total=Sum("withdrawn_rub"))["total"] or Decimal("0")
+    commission = wds.aggregate(total=Sum("commission_rub"))["total"] or Decimal("0")
+
+    remaining = received - withdrawn - commission
     return remaining if remaining > 0 else Decimal("0")
 
 
@@ -120,26 +178,29 @@ def _parse_user_date(raw: str):
 def _format_user_date(day: date) -> str:
     return day.strftime(DATE_DISPLAY_FORMAT)
 
-
-@login_required
-def withdraw_today(request):
-    day_raw = (request.GET.get("date") or "").strip()
-    parsed_day = _parse_user_date(day_raw)
-    day = parsed_day or date.today()
-    bank_filter = (request.GET.get("bank") or "").strip()
-    day_display = _format_user_date(parsed_day or day)
-
-    # IMPORTANT: this view must always return render() at the end
-    # We no longer use POST here (autosave uses a separate endpoint),
-    # but if your browser posts to it, we still safely ignore it.
-
-    rows = []
+def _withdraw_totals(rows):
     totals = {
         "should": Decimal("0"),
         "withdrawn": Decimal("0"),
         "commission": Decimal("0"),
         "remaining": Decimal("0"),
     }
+    for r in rows:
+        totals["should"] += r["should_have"]
+        totals["withdrawn"] += r["withdrawn_value"]
+        totals["commission"] += r["commission_value"]
+        totals["remaining"] += r["remaining"]
+    return totals
+
+
+def _cards_with_totals(cards, start_date=None, end_date=None):
+    cards_list, overall = _cards_with_totals(cards, start_date, end_date)
+
+    return cards_list, overall
+
+
+def _withdraw_rows_for_day(day):
+    rows = []
     banks = []
     for card in Card.objects.filter(status="active").order_by("name"):
         carry_in = _closing_before(card, day)
@@ -183,14 +244,56 @@ def withdraw_today(request):
                     "commission_value": commission,
                 }
             )
-            totals["should"] += should
-
-            totals["commission"] += commission
-            totals["withdrawn"] += withdrawn_amount
-            totals["remaining"] += remaining
 
     rows.sort(key=lambda r: r["card_label"])
     banks.sort()
+    return rows, banks
+
+
+def _payments_rows(start_date=None, end_date=None, query=None):
+    txs = Transaction.objects.select_related("client").order_by("-timestamp")
+    if start_date:
+        txs = txs.filter(timestamp__date__gte=start_date)
+    if end_date:
+        txs = txs.filter(timestamp__date__lte=end_date)
+    if query:
+        txs = txs.filter(client__name__icontains=query)
+
+    summary = defaultdict(lambda: {"rub": Decimal("0"), "usd": Decimal("0")})
+    for tx in txs:
+        key = (tx.timestamp.date(), tx.client_id)
+        summary[key]["rub"] += tx.amount_rub or Decimal("0")
+        summary[key]["usd"] += tx.amount_usd or Decimal("0")
+
+    client_cache = {}
+    rows = []
+    for (day, client_id), totals in summary.items():
+        client = client_cache.setdefault(client_id, Client.objects.get(pk=client_id))
+        rows.append({
+            "date": day,
+            "client": client,
+            "rub": totals["rub"],
+            "usd": totals["usd"],
+        })
+    rows.sort(key=lambda r: (r["date"], r["client"].name), reverse=True)
+    return rows
+
+
+@login_required
+def withdraw_today(request):
+    day_raw = (request.GET.get("date") or "").strip()
+    parsed_day = _parse_user_date(day_raw)
+    day = parsed_day or date.today()
+    bank_filter = (request.GET.get("bank") or "").strip()
+    query = (request.GET.get("q") or "").strip()
+    per_page = _parse_per_page(request.GET.get("per_page"), default=50)
+    day_display = _format_user_date(parsed_day or day)
+
+    # IMPORTANT: this view must always return render() at the end
+    # We no longer use POST here (autosave uses a separate endpoint),
+    # but if your browser posts to it, we still safely ignore it.
+
+    rows, banks = _withdraw_rows_for_day(day)
 
     if bank_filter:
         filter_lower = bank_filter.lower()
@@ -199,19 +302,25 @@ def withdraw_today(request):
             r for r in rows if filter_lower in (r["bank"] or "").lower()
         ]
         rows = filtered_rows
-        totals = {
-            "should": Decimal("0"),
-            "withdrawn": Decimal("0"),
-            "commission": Decimal("0"),
-            "remaining": Decimal("0"),
-        }
-        for r in rows:
-            totals["should"] += r["should_have"]
-            totals["withdrawn"] += r["withdrawn_value"]
-            totals["commission"] += r["commission_value"]
-            totals["remaining"] += r["remaining"]
+        totals = _withdraw_totals(rows)
         if rows:
             bank_filter = rows[0]["bank"]
+
+    if query:
+        q = query.lower()
+        rows = [
+            r
+            for r in rows
+            if q in r["card_label"].lower()
+            or q in (r["bank"] or "").lower()
+            or q in (r["pin"] or "").lower()
+        ]
+        totals = _withdraw_totals(rows)
+
+    paginator = Paginator(rows, per_page)
+    page_number = request.GET.get("page")
+    page_obj = paginator.get_page(page_number)
+    totals = _withdraw_totals(page_obj)
 
     return render(
         request,
@@ -219,12 +328,61 @@ def withdraw_today(request):
         {
             "day": day,
             "day_display": day_display,
-            "rows": rows,
+            "page_obj": page_obj,
+            "page_items": _pagination_items(page_obj),
             "totals": totals,
             "banks": banks,
             "selected_bank": bank_filter,
+            "query": query,
+            "per_page": per_page,
+            "per_page_choices": PER_PAGE_CHOICES,
         },
     )
+
+@login_required
+def withdraw_search(request):
+    day_raw = (request.GET.get("date") or "").strip()
+    parsed_day = _parse_user_date(day_raw)
+    day = parsed_day or date.today()
+    bank_filter = (request.GET.get("bank") or "").strip()
+    query = (request.GET.get("q") or "").strip()
+
+    rows, banks = _withdraw_rows_for_day(day)
+    if bank_filter:
+        filter_lower = bank_filter.lower()
+        exact_rows = [r for r in rows if (r["bank"] or "").lower() == filter_lower]
+        rows = exact_rows or [r for r in rows if filter_lower in (r["bank"] or "").lower()]
+        if rows:
+            bank_filter = rows[0]["bank"]
+
+    if query:
+        q = query.lower()
+        rows = [
+            r
+            for r in rows
+            if q in r["card_label"].lower()
+            or q in (r["bank"] or "").lower()
+            or q in (r["pin"] or "").lower()
+        ]
+
+    data = []
+    for r in rows:
+        wd = r["withdrawal"]
+        data.append(
+            {
+                "card_id": r["card_id"],
+                "card_label": r["card_label"],
+                "pin": r["pin"] or "",
+                "should_have": str(r["should_have"]),
+                "remaining": str(r["remaining"]),
+                "fully_withdrawn": bool(wd.fully_withdrawn) if wd else False,
+                "withdrawn_rub": "" if not wd or wd.withdrawn_rub is None else str(wd.withdrawn_rub),
+                "commission_rub": "" if not wd or wd.commission_rub is None else str(wd.commission_rub),
+                "note": "" if not wd or not wd.note else wd.note,
+            }
+        )
+
+    return JsonResponse({"results": data})
 
 @login_required
 @require_POST
@@ -242,6 +400,15 @@ def withdraw_today_save(request):
 
     wd, _ = Withdrawal.objects.get_or_create(date=day, card_id=int(card_id))
 
+    def parse_decimal(value, field):
+        if value in (None, ""):
+            return None
+        raw = str(value).replace(" ", "").replace(",", ".")
+        try:
+            return Decimal(raw)
+        except (InvalidOperation, ValueError):
+            raise ValueError(f"Invalid {field}")
+
     # IMPORTANT: always set fully_withdrawn explicitly
     wd.fully_withdrawn = (request.POST.get("fully_withdrawn") == "true")
 
@@ -249,10 +416,17 @@ def withdraw_today_save(request):
         wd.withdrawn_rub = None
     else:
         val = request.POST.get("withdrawn_rub")
-        wd.withdrawn_rub = val if val not in (None, "") else None
+        try:
+            wd.withdrawn_rub = parse_decimal(val, "withdrawn") if val not in (None, "") else None
+        except ValueError as exc:
+            return JsonResponse({"ok": False, "error": str(exc)}, status=400)
 
     comm = request.POST.get("commission_rub")
-    wd.commission_rub = comm if comm not in (None, "") else 0
+    try:
+        commission = parse_decimal(comm, "commission")
+    except ValueError as exc:
+        return JsonResponse({"ok": False, "error": str(exc)}, status=400)
+    wd.commission_rub = commission if commission is not None else 0
 
     wd.note = request.POST.get("note") or ""
     wd.save()
@@ -270,6 +444,8 @@ def cards_list(request):
     end_raw = (request.GET.get("end") or "").strip()
     bank_filter = (request.GET.get("bank") or "").strip()
     group_filter = (request.GET.get("group") or "").strip()
+    query = (request.GET.get("q") or "").strip()
+    per_page = _parse_per_page(request.GET.get("per_page"), default=50)
     start_date = _parse_user_date(start_raw)
     end_date = _parse_user_date(end_raw)
     if start_date:
@@ -281,6 +457,15 @@ def cards_list(request):
         cards = cards.filter(bank__icontains=bank_filter)
     if group_filter:
         cards = cards.filter(group__name__icontains=group_filter)
+    if query:
+        cards = cards.filter(
+            Q(name__icontains=query)
+            | Q(bank__icontains=query)
+            | Q(card_number__icontains=query)
+            | Q(pin__icontains=query)
+            | Q(group__name__icontains=query)
+            | Q(notes__icontains=query)
+        )
 
     tx_filter = {}
     wd_filter = {}
@@ -312,7 +497,8 @@ def cards_list(request):
         "balance": Decimal("0"),
     }
 
-    for card in cards:
+    cards_list = list(cards)
+    for card in cards_list:
         received = received_map.get(card.id, Decimal("0"))
         withdrawn = withdraw_map[card.id]["amount"]
         commission = withdraw_map[card.id]["commission"]
@@ -325,6 +511,10 @@ def cards_list(request):
         overall["commission"] += commission
         overall["balance"] += card.balance_total
 
+    paginator = Paginator(cards_list, per_page)
+    page_number = request.GET.get("page")
+    page_obj = paginator.get_page(page_number)
+
     form = CardForm(request.POST or None)
     if request.method == "POST" and form.is_valid():
         form.save()
@@ -333,7 +523,8 @@ def cards_list(request):
         request,
         "core/cards_list.html",
         {
-            "cards": cards,
+            "page_obj": page_obj,
+            "page_items": _pagination_items(page_obj),
             "form": form,
             "start": start_raw,
             "end": end_raw,
@@ -342,8 +533,120 @@ def cards_list(request):
             "overall": overall,
             "groups": groups,
             "banks": banks,
+            "query": query,
+            "per_page": per_page,
+            "per_page_choices": PER_PAGE_CHOICES,
         },
     )
+
+@login_required
+def cards_export(request):
+    cards = Card.objects.select_related("group").all().order_by("name")
+    start_raw = (request.GET.get("start") or "").strip()
+    end_raw = (request.GET.get("end") or "").strip()
+    bank_filter = (request.GET.get("bank") or "").strip()
+    group_filter = (request.GET.get("group") or "").strip()
+    query = (request.GET.get("q") or "").strip()
+    start_date = _parse_user_date(start_raw)
+    end_date = _parse_user_date(end_raw)
+
+    if bank_filter:
+        cards = cards.filter(bank__icontains=bank_filter)
+    if group_filter:
+        cards = cards.filter(group__name__icontains=group_filter)
+    if query:
+        cards = cards.filter(
+            Q(name__icontains=query)
+            | Q(bank__icontains=query)
+            | Q(card_number__icontains=query)
+            | Q(pin__icontains=query)
+            | Q(group__name__icontains=query)
+            | Q(notes__icontains=query)
+        )
+
+    cards_list, overall = _cards_with_totals(cards, start_date, end_date)
+
+    response = HttpResponse(content_type="text/csv")
+    response["Content-Disposition"] = 'attachment; filename="cards.csv"'
+    writer = csv.writer(response)
+    writer.writerow([
+        "Name",
+        "Bank",
+        "Group",
+        "Number",
+        "PIN",
+        "Received",
+        "Withdrawn",
+        "Commission",
+        "Balance",
+        "Status",
+        "Notes",
+    ])
+    for card in cards_list:
+        writer.writerow([
+            card.name,
+            card.bank,
+            card.group.name if card.group else "",
+            card.card_number,
+            card.pin,
+            card.received_total,
+            card.withdrawn_total,
+            card.commission_total,
+            card.balance_total,
+            card.status,
+            card.notes,
+        ])
+    return response
+
+@login_required
+def cards_search(request):
+    cards = Card.objects.select_related("group").all().order_by("name")
+    start_raw = (request.GET.get("start") or "").strip()
+    end_raw = (request.GET.get("end") or "").strip()
+    bank_filter = (request.GET.get("bank") or "").strip()
+    group_filter = (request.GET.get("group") or "").strip()
+    query = (request.GET.get("q") or "").strip()
+    start_date = _parse_user_date(start_raw)
+    end_date = _parse_user_date(end_raw)
+
+    if bank_filter:
+        cards = cards.filter(bank__icontains=bank_filter)
+    if group_filter:
+        cards = cards.filter(group__name__icontains=group_filter)
+    if query:
+        cards = cards.filter(
+            Q(name__icontains=query)
+            | Q(bank__icontains=query)
+            | Q(card_number__icontains=query)
+            | Q(pin__icontains=query)
+            | Q(group__name__icontains=query)
+            | Q(notes__icontains=query)
+        )
+
+    cards_list, _overall = _cards_with_totals(cards, start_date, end_date)
+    data = []
+    for card in cards_list:
+        data.append(
+            {
+                "id": card.id,
+                "name": card.name,
+                "bank": card.bank or "",
+                "group": card.group.name if card.group else "",
+                "card_number": card.card_number or "",
+                "pin": card.pin or "",
+                "received": _format_spaced_number(card.received_total),
+                "withdrawn": _format_spaced_number(card.withdrawn_total),
+                "commission": _format_spaced_number(card.commission_total),
+                "balance": _format_spaced_number(card.balance_total),
+            }
+        )
+    totals = {
+        "received": _format_spaced_number(overall["received"]),
+        "withdrawn": _format_spaced_number(overall["withdrawn"]),
+        "commission": _format_spaced_number(overall["commission"]),
+        "balance": _format_spaced_number(overall["balance"]),
+    }
+    return JsonResponse({"results": data, "totals": totals})
 
 
 @login_required
@@ -352,18 +655,41 @@ def clients_list(request):
     query = (request.GET.get("q") or "").strip()
     if query:
         clients = clients.filter(name__icontains=query)
+    per_page = _parse_per_page(request.GET.get("per_page"), default=50)
     form = ClientForm(request.POST or None)
     if request.method == "POST" and form.is_valid():
         form.save()
         return redirect("clients_list")
-    paginator = Paginator(clients, 50)
+    paginator = Paginator(clients, per_page)
     page_number = request.GET.get("page")
     page_obj = paginator.get_page(page_number)
     return render(
         request,
         "core/clients_list.html",
-        {"page_obj": page_obj, "form": form, "query": query},
+        {
+            "page_obj": page_obj,
+            "page_items": _pagination_items(page_obj),
+            "form": form,
+            "query": query,
+            "per_page": per_page,
+            "per_page_choices": PER_PAGE_CHOICES,
+        },
     )
+
+@login_required
+def clients_export(request):
+    query = (request.GET.get("q") or "").strip()
+    clients = Client.objects.all().order_by("name")
+    if query:
+        clients = clients.filter(name__icontains=query)
+
+    response = HttpResponse(content_type="text/csv")
+    response["Content-Disposition"] = 'attachment; filename="clients.csv"'
+    writer = csv.writer(response)
+    writer.writerow(["Name", "Status", "Notes"])
+    for client in clients:
+        writer.writerow([client.name, client.status, client.notes])
+    return response
 
 @login_required
 def clients_search(request):
@@ -422,22 +748,35 @@ def transactions_list(request):
     if end_date:
         txs = txs.filter(timestamp__date__lte=end_date)
 
+    query = (request.GET.get("q") or "").strip()
+    if query:
+        txs = txs.filter(
+            Q(client__name__icontains=query)
+            | Q(card__name__icontains=query)
+            | Q(notes__icontains=query)
+        )
+
     if request.method == "POST":
-        form = TransactionForm(request.POST)
+        form = TransactionForm(request.POST, request=request)
         if form.is_valid():
             form.save()
             return redirect(request.get_full_path())
     else:
-        form = TransactionForm()
+        form = TransactionForm(request=request)
 
-    paginator = Paginator(txs, 50)
+    per_page = _parse_per_page(request.GET.get("per_page"), default=50)
+    paginator = Paginator(txs, per_page)
     page_number = request.GET.get("page")
     page_obj = paginator.get_page(page_number)
 
     context = {
         "page_obj": page_obj,
+        "page_items": _pagination_items(page_obj),
         "start": start_raw,
         "end": end_raw,
+        "query": query,
+        "per_page": per_page,
+        "per_page_choices": PER_PAGE_CHOICES,
         "form": form,
         "cards": cards,
         "clients": clients,
@@ -445,6 +784,78 @@ def transactions_list(request):
         "client_lookup": {str(c.id): c.name for c in clients},
     }
     return render(request, "core/transactions_list.html", context)
+
+@login_required
+def transactions_export(request):
+    txs = Transaction.objects.select_related("card", "client").order_by("-timestamp")
+    start_raw = (request.GET.get("start") or "").strip()
+    end_raw = (request.GET.get("end") or "").strip()
+    start_date = _parse_user_date(start_raw)
+    end_date = _parse_user_date(end_raw)
+    if start_date:
+        txs = txs.filter(timestamp__date__gte=start_date)
+    if end_date:
+        txs = txs.filter(timestamp__date__lte=end_date)
+
+    query = (request.GET.get("q") or "").strip()
+    if query:
+        txs = txs.filter(
+            Q(client__name__icontains=query)
+            | Q(card__name__icontains=query)
+            | Q(notes__icontains=query)
+        )
+
+    response = HttpResponse(content_type="text/csv")
+    response["Content-Disposition"] = 'attachment; filename="transactions.csv"'
+    writer = csv.writer(response)
+    writer.writerow(["Time", "Client", "Card", "RUB", "USD", "Rate", "Notes"])
+    for tx in txs:
+        ts = tx.timestamp.strftime("%d/%m/%Y %H:%M")
+        writer.writerow([
+            ts,
+            tx.client.name,
+            tx.card.name,
+            tx.amount_rub,
+            tx.amount_usd,
+            tx.rate,
+            tx.notes,
+        ])
+    return response
+
+@login_required
+def transactions_search(request):
+    txs = Transaction.objects.select_related("card", "client").order_by("-timestamp")
+    start_raw = (request.GET.get("start") or "").strip()
+    end_raw = (request.GET.get("end") or "").strip()
+    start_date = _parse_user_date(start_raw)
+    end_date = _parse_user_date(end_raw)
+    if start_date:
+        txs = txs.filter(timestamp__date__gte=start_date)
+    if end_date:
+        txs = txs.filter(timestamp__date__lte=end_date)
+
+    query = (request.GET.get("q") or "").strip()
+    if query:
+        txs = txs.filter(
+            Q(client__name__icontains=query)
+            | Q(card__name__icontains=query)
+            | Q(notes__icontains=query)
+        )
+
+    data = []
+    for tx in txs:
+        data.append(
+            {
+                "id": tx.id,
+                "time_iso": tx.timestamp.isoformat(),
+                "client": tx.client.name,
+                "card": tx.card.name,
+                "rub": _format_spaced_number(tx.amount_rub),
+                "usd": _format_spaced_number(tx.amount_usd),
+                "rate": _format_spaced_number(tx.rate),
+            }
+        )
+    return JsonResponse({"results": data})
 
 @login_required
 def card_add(request):
@@ -566,7 +977,7 @@ def group_delete(request, pk: int):
 
 @login_required
 def transaction_add(request):
-    form = TransactionForm(request.POST or None)
+    form = TransactionForm(request.POST or None, request=request)
     if request.method == "POST" and form.is_valid():
         form.save()
         return redirect("transactions_list")
@@ -576,7 +987,7 @@ def transaction_add(request):
 @login_required
 def transaction_edit(request, pk: int):
     tx = get_object_or_404(Transaction, pk=pk)
-    form = TransactionForm(request.POST or None, instance=tx)
+    form = TransactionForm(request.POST or None, instance=tx, request=request)
     if request.method == "POST" and form.is_valid():
         form.save()
         return redirect("transactions_list")
@@ -661,6 +1072,74 @@ def card_history(request, pk: int):
         "end": end_raw,
     }
     return render(request, "core/card_history.html", context)
+
+@login_required
+def card_history_search(request, pk: int):
+    card = get_object_or_404(Card, pk=pk)
+    start_raw = (request.GET.get("start") or "").strip()
+    end_raw = (request.GET.get("end") or "").strip()
+    start_date = _parse_user_date(start_raw)
+    end_date = _parse_user_date(end_raw)
+
+    tx_filter = {"card": card}
+    wd_filter = {"card": card}
+    if start_date:
+        tx_filter["timestamp__date__gte"] = start_date
+        wd_filter["date__gte"] = start_date
+    if end_date:
+        tx_filter["timestamp__date__lte"] = end_date
+        wd_filter["date__lte"] = end_date
+
+    received = (
+        Transaction.objects.filter(**tx_filter).aggregate(total=Sum("amount_rub"))["total"]
+        or Decimal("0")
+    )
+
+    cache = {}
+    withdrawals = []
+    total_withdrawn = Decimal("0")
+    total_commission = Decimal("0")
+    for wd in (
+        Withdrawal.objects.filter(**wd_filter)
+        .select_related("card")
+        .order_by("-date")
+    ):
+        actual = _withdrawal_actual_amount(wd, cache)
+        if actual <= 0:
+            continue
+        commission = wd.commission_rub or Decimal("0")
+        withdrawals.append(
+            {
+                "date": wd.date.strftime("%d/%m/%Y"),
+                "status": "Full" if wd.fully_withdrawn else "Partial",
+                "amount": _format_spaced_number(actual),
+                "commission": _format_spaced_number(commission),
+                "note": wd.note or "",
+            }
+        )
+        total_withdrawn += actual
+        total_commission += commission
+
+    txs = Transaction.objects.filter(**tx_filter).select_related("client").order_by("-timestamp")[:100]
+    transactions = []
+    for tx in txs:
+        transactions.append(
+            {
+                "time": tx.timestamp.strftime("%d/%m/%Y, %H:%M"),
+                "client": tx.client.name,
+                "rub": _format_spaced_number(tx.amount_rub),
+                "usd": _format_spaced_number(tx.amount_usd),
+                "note": tx.notes or "",
+            }
+        )
+
+    totals = {
+        "received": _format_spaced_number(received),
+        "withdrawn": _format_spaced_number(total_withdrawn),
+        "commission": _format_spaced_number(total_commission),
+        "balance": _format_spaced_number(received - total_withdrawn - total_commission),
+    }
+    return JsonResponse({"totals": totals, "transactions": transactions, "withdrawals": withdrawals})
 @login_required
 def payments_summary(request):
     clear_filters = "clear" in request.GET
@@ -696,35 +1175,56 @@ def payments_summary(request):
             end_raw = stored_end
             end_date = _parse_user_date(stored_end)
 
-    txs = Transaction.objects.select_related("client").order_by("-timestamp")
-    if start_date:
-        txs = txs.filter(timestamp__date__gte=start_date)
-    if end_date:
-        txs = txs.filter(timestamp__date__lte=end_date)
-
-    summary = defaultdict(lambda: {"rub": Decimal("0"), "usd": Decimal("0")})
-    for tx in txs:
-        key = (tx.timestamp.date(), tx.client_id)
-        summary[key]["rub"] += tx.amount_rub or Decimal("0")
-        summary[key]["usd"] += tx.amount_usd or Decimal("0")
-
-    client_cache = {}
-    rows = []
-    for (day, client_id), totals in summary.items():
-        client = client_cache.setdefault(client_id, Client.objects.get(pk=client_id))
-        rows.append({
-            "date": day,
-            "client": client,
-            "rub": totals["rub"],
-            "usd": totals["usd"],
-        })
-    rows.sort(key=lambda r: (r["date"], r["client"].name), reverse=True)
+    query = (request.GET.get("q") or "").strip()
+    rows = _payments_rows(start_date, end_date, query)
 
     return render(
         request,
         "core/payments_summary.html",
-        {"rows": rows, "start": start_raw, "end": end_raw},
+        {"rows": rows, "start": start_raw, "end": end_raw, "query": query},
     )
+
+@login_required
+def payments_search(request):
+    start_raw = (request.GET.get("start") or "").strip()
+    end_raw = (request.GET.get("end") or "").strip()
+    start_date = _parse_user_date(start_raw)
+    end_date = _parse_user_date(end_raw)
+    query = (request.GET.get("q") or "").strip()
+    rows = _payments_rows(start_date, end_date, query)
+    data = []
+    for row in rows:
+        data.append(
+            {
+                "date": row["date"].strftime("%d/%m/%Y"),
+                "client": row["client"].name,
+                "rub": _format_spaced_number(row["rub"]),
+                "usd": _format_spaced_number(row["usd"]),
+            }
+        )
+    return JsonResponse({"results": data})
+
+@login_required
+def payments_export(request):
+    start_raw = (request.GET.get("start") or "").strip()
+    end_raw = (request.GET.get("end") or "").strip()
+    start_date = _parse_user_date(start_raw)
+    end_date = _parse_user_date(end_raw)
+    query = (request.GET.get("q") or "").strip()
+    rows = _payments_rows(start_date, end_date, query)
+
+    response = HttpResponse(content_type="text/csv")
+    response["Content-Disposition"] = 'attachment; filename="payments.csv"'
+    writer = csv.writer(response)
+    writer.writerow(["Date", "Client", "RUB", "USD"])
+    for row in rows:
+        writer.writerow([
+            row["date"].strftime("%d/%m/%Y"),
+            row["client"].name,
+            row["rub"],
+            row["usd"],
+        ])
+    return response
 @login_required
 def groups_list(request):
     groups = CardGroup.objects.order_by("name")

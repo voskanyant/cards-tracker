@@ -3,9 +3,9 @@
 {% block content %}
 
 <section class="section-card">
-    <div style="display:flex; flex-wrap:wrap; justify-content:space-between; gap:12px; align-items:center;">
+    <div style="display:flex; flex-direction:column; gap:12px;">
       <h2 style="margin:0;">Withdraw Today</h2>
-      <div style="display:flex; flex-wrap:wrap; gap:12px;">
+      <div style="display:flex; flex-wrap:wrap; gap:12px; width:100%;">
         <label style="display:flex; flex-direction:column; min-width:160px;">
           <span>Work date</span>
           <div class="date-field">
@@ -21,6 +21,18 @@
             <div class="combo-dropdown"></div>
           </div>
         </label>
+        <label style="display:flex; flex-direction:column; min-width:220px; flex:1;">
+          <span>Search</span>
+          <input type="text" id="withdraw-search" placeholder="Search card/bank/pin..." value="{{ query }}" autocomplete="off">
+        </label>
+        <label class="withdraw-per-page" style="display:flex; flex-direction:column; min-width:140px;">
+          <span>Per page</span>
+          <select id="withdraw-per-page">
+            {% for option in per_page_choices %}
+              <option value="{{ option }}" {% if option == per_page %}selected{% endif %}>{{ option }}</option>
+            {% endfor %}
+          </select>
+        </label>
         <datalist id="withdraw-bank-options">
           {% for bank in banks %}
             <option data-id="{{ bank }}" value="{{ bank }}"></option>
@@ -32,50 +44,54 @@
 	  {% csrf_token %}
 
   <div class="table-card table-scroll" style="margin-top:16px;">
-	  <table>
+	  <table class="withdraw-table">
 		<thead>
 		  <tr>
 			<th class="col-card">Card</th>
-			<th>PIN</th>
-			<th class="num col-narrow">Should have</th>
-			<th>Full</th>
-			<th class="num col-narrow">Withdrawn</th>
-			<th class="num col-narrow">Commission</th>
-			<th class="num col-narrow">Remaining</th>
-			<th>Note</th>
+			<th class="col-pin">PIN</th>
+			<th class="num col-money">Due ₽</th>
+			<th class="col-full">Full</th>
+			<th class="num col-money-input">Taken ₽</th>
+			<th class="num col-money-input">Fee ₽</th>
+			<th class="num col-money">Left ₽</th>
+			<th class="col-note">Note</th>
 		  </tr>
 		</thead>
 
 
 
 		<tbody>
-		  {% for r in rows %}
+		  {% for r in page_obj %}
 			<tr data-card-id="{{ r.card_id }}" data-should="{{ r.should_have|floatformat:'2' }}">
 			  <td class="col-card">{{ r.card_label }}</td>
-			  <td><b>{{ r.pin }}</b></td>
-			  <td class="num col-narrow"><b>{{ r.should_have|spaced_number }}</b></td>
+			  <td class="col-pin"><b>{{ r.pin }}</b></td>
+			  <td class="num col-money"><b>{{ r.should_have|spaced_number }} ₽</b></td>
 
-			  <td style="text-align:center;">
+			  <td class="col-full">
 				<input type="checkbox" class="full"
 					   {% if r.withdrawal and r.withdrawal.fully_withdrawn %}checked{% endif %}>
 			  </td>
 
-			  <td class="num col-narrow">
-				<input type="number" step="0.01" class="withdrawn"
-				   value="{% if r.withdrawal %}{{ r.withdrawal.withdrawn_rub|default:'' }}{% endif %}"
-				   {% if r.withdrawal and r.withdrawal.fully_withdrawn %}disabled{% endif %}>
-
+			  <td class="num col-money-input">
+				<div class="currency-input">
+				  <span class="currency-prefix">₽</span>
+				  <input type="text" inputmode="decimal" class="withdrawn" 
+					 value="{% if r.withdrawal %}{{ r.withdrawal.withdrawn_rub|default:'' }}{% endif %}"
+					 {% if r.withdrawal and r.withdrawal.fully_withdrawn %}disabled{% endif %}>
+				</div>
 			  </td>
 
-			  <td class="num col-narrow">
-				<input type="number" step="0.01" class="commission"
-					value="{% if r.withdrawal %}{{ r.withdrawal.commission_rub|default:'' }}{% endif %}">
-
+			  <td class="num col-money-input">
+				<div class="currency-input">
+				  <span class="currency-prefix">₽</span>
+				  <input type="text" inputmode="decimal" class="commission" 
+					  value="{% if r.withdrawal %}{{ r.withdrawal.commission_rub|default:'' }}{% endif %}">
+				</div>
 			  </td>
 
-			  <td class="num col-narrow"><b class="remaining-value">{{ r.remaining|spaced_number }}</b></td>
+			  <td class="num col-money"><b class="remaining-value">{{ r.remaining|spaced_number }} ₽</b></td>
 
-			  <td>
+			  <td class="col-note">
 				<div class="note-cell {% if r.withdrawal and r.withdrawal.note %}has-note{% endif %}">
 				  <div class="note-preview">
 					{% if r.withdrawal and r.withdrawal.note %}
@@ -99,11 +115,11 @@
 		<tfoot>
 		  <tr>
 			<td colspan="2"><b>Totals</b></td>
-			<td class="num col-narrow"><b id="total-should">{{ totals.should|default:0|spaced_number }}</b></td>
+			<td class="num col-money"><b id="total-should">{{ totals.should|default:0|spaced_number }}</b> ₽</td>
 			<td></td>
-			<td class="num col-narrow"><b id="total-withdrawn">{{ totals.withdrawn|default:0|spaced_number }}</b></td>
-			<td class="num col-narrow"><b id="total-commission">{{ totals.commission|default:0|spaced_number }}</b></td>
-			<td class="num col-narrow"><b id="total-remaining">{{ totals.remaining|default:0|spaced_number }}</b></td>
+			<td class="num col-money"><b id="total-withdrawn">{{ totals.withdrawn|default:0|spaced_number }}</b> ₽</td>
+			<td class="num col-money"><b id="total-commission">{{ totals.commission|default:0|spaced_number }}</b> ₽</td>
+			<td class="num col-money"><b id="total-remaining">{{ totals.remaining|default:0|spaced_number }}</b> ₽</td>
 			<td></td>
 		  </tr>
 		</tfoot>
@@ -128,6 +144,28 @@
     </div>
   </div>
 </div>
+
+  {% if page_obj.has_other_pages %}
+    <div class="pagination" style="margin-top:16px; display:flex; gap:8px; flex-wrap:wrap; align-items:center;">
+      {% if page_obj.has_previous %}
+        <a href="?{% if day_display %}date={{ day_display|urlencode }}&{% endif %}{% if selected_bank %}bank={{ selected_bank|urlencode }}&{% endif %}{% if query %}q={{ query|urlencode }}&{% endif %}per_page={{ per_page }}&page={{ page_obj.previous_page_number }}">Prev</a>
+      {% endif %}
+      {% for num in page_items %}
+        {% if num %}
+          {% if num == page_obj.number %}
+            <span style="padding:4px 8px; border-radius:8px; background:#e2e8f0; font-weight:600;">{{ num }}</span>
+          {% else %}
+            <a href="?{% if day_display %}date={{ day_display|urlencode }}&{% endif %}{% if selected_bank %}bank={{ selected_bank|urlencode }}&{% endif %}{% if query %}q={{ query|urlencode }}&{% endif %}per_page={{ per_page }}&page={{ num }}" style="padding:4px 8px;">{{ num }}</a>
+          {% endif %}
+        {% else %}
+          <span style="padding:4px 6px; color:var(--muted);">...</span>
+        {% endif %}
+      {% endfor %}
+      {% if page_obj.has_next %}
+        <a href="?{% if day_display %}date={{ day_display|urlencode }}&{% endif %}{% if selected_bank %}bank={{ selected_bank|urlencode }}&{% endif %}{% if query %}q={{ query|urlencode }}&{% endif %}per_page={{ per_page }}&page={{ page_obj.next_page_number }}">Next</a>
+      {% endif %}
+    </div>
+  {% endif %}
 
 	<script>
 	  // --- CSRF ---
@@ -164,6 +202,12 @@
 		return Number.isFinite(parsed) ? parsed : 0;
 	  }
 
+	  function normalizeNumberString(value) {
+		if (value === undefined || value === null) return "";
+		const normalized = String(value).replace(/\s+/g, "").replace(",", ".");
+		return normalized;
+	  }
+
 	  function formatNumber(value) {
 		const rounded = Math.round((value + Number.EPSILON) * 100) / 100;
 		let [intPart, fracPart] = rounded.toFixed(2).split(".");
@@ -173,6 +217,15 @@
 		fracPart = fracPart.replace(/0+$/, "");
 		const formattedInt = `${sign}${intPart || "0"}`;
 		return fracPart ? `${formattedInt}.${fracPart}` : formattedInt;
+	  }
+
+	  function escapeHtml(value) {
+		return String(value || "")
+		  .replace(/&/g, "&amp;")
+		  .replace(/</g, "&lt;")
+		  .replace(/>/g, "&gt;")
+		  .replace(/"/g, "&quot;")
+		  .replace(/'/g, "&#039;");
 	  }
 
 	  function computeRowState(row) {
@@ -192,7 +245,7 @@
 
 		const remainingEl = row.querySelector(".remaining-value");
 		if (remainingEl) {
-		  remainingEl.textContent = formatNumber(remaining);
+		  remainingEl.textContent = `${formatNumber(remaining)} ₽`;
 		}
 
 		return { should, withdrawn, commission, remaining };
@@ -240,8 +293,8 @@
 		formData.append("date", workdate);
 		formData.append("card_id", cardId);
 		formData.append("fully_withdrawn", full ? "true" : "false");
-		formData.append("withdrawn_rub", full ? "" : (withdrawnEl?.value ?? ""));
-		formData.append("commission_rub", commissionEl?.value ?? "");
+		formData.append("withdrawn_rub", full ? "" : normalizeNumberString(withdrawnEl?.value ?? ""));
+		formData.append("commission_rub", normalizeNumberString(commissionEl?.value ?? ""));
 		formData.append("note", noteEl?.value ?? "");
 
 
@@ -272,18 +325,37 @@
 		}
 	  }
 
-	  document.querySelectorAll("tr[data-card-id]").forEach(row => {
-		row.addEventListener("change", (e) => {
-		  refreshTotals();
-		  autosave(row);
+	  function formatNumericInputs() {
+		document.querySelectorAll(".withdrawn, .commission").forEach(input => {
+		  const raw = input.value;
+		  if (!raw) return;
+		  input.value = formatNumber(parseNumber(raw));
 		});
+	  }
 
-		row.addEventListener("input", (e) => {
-		  if (e.target.classList.contains("withdrawn") || e.target.classList.contains("commission")) {
+	  function bindRows() {
+		document.querySelectorAll("tr[data-card-id]").forEach(row => {
+		  if (row.dataset.bound) return;
+		  row.dataset.bound = "1";
+		  row.addEventListener("change", (e) => {
 			refreshTotals();
-		  }
+			autosave(row);
+		  });
+
+		  row.addEventListener("input", (e) => {
+			if (e.target.classList.contains("withdrawn") || e.target.classList.contains("commission")) {
+			  refreshTotals();
+			}
+		  });
+
+		  row.querySelectorAll(".withdrawn, .commission").forEach(input => {
+			input.addEventListener("blur", () => {
+			  if (!input.value) return;
+			  input.value = formatNumber(parseNumber(input.value));
+			});
+		  });
 		});
-	  });
+	  }
 
 	  const noteModal = document.getElementById("note-modal");
 	  const noteTextarea = document.getElementById("note-modal-text");
@@ -324,13 +396,17 @@
 		cell.classList.toggle("has-note", Boolean(value));
 	  }
 
-	  document.querySelectorAll(".note-trigger").forEach(btn => {
-		const row = btn.closest("tr[data-card-id]");
-		if (!row) return;
-		const hidden = row.querySelector(".note");
-		updateNoteDisplay(row, hidden?.value || "");
-		btn.addEventListener("click", () => openNoteModal(row));
-	  });
+	  function bindNotes() {
+		document.querySelectorAll(".note-trigger").forEach(btn => {
+		  if (btn.dataset.bound) return;
+		  btn.dataset.bound = "1";
+		  const row = btn.closest("tr[data-card-id]");
+		  if (!row) return;
+		  const hidden = row.querySelector(".note");
+		  updateNoteDisplay(row, hidden?.value || "");
+		  btn.addEventListener("click", () => openNoteModal(row));
+		});
+	  }
 
 	  noteSaveBtn?.addEventListener("click", () => {
 		if (!activeNoteRow || !noteTextarea) return;
@@ -359,24 +435,160 @@
 		}
 	  });
 
+	  bindRows();
+	  bindNotes();
+	  formatNumericInputs();
 	  refreshTotals();
 
-	  // --- Date/bank filters: navigate ONLY after saves complete ---
+	  // --- Date/bank filters + live search ---
 	  const wd = document.getElementById("workdate");
 	  const bankHidden = document.getElementById("bank-filter");
 	  const bankInput = document.getElementById("bank-input");
 	  const bankDropdown = bankInput?.parentElement?.querySelector(".combo-dropdown");
+	  const searchInput = document.getElementById("withdraw-search");
+	  const perPageSelect = document.getElementById("withdraw-per-page");
+	  const perPageLabel = document.querySelector(".withdraw-per-page");
+	  const tbody = document.querySelector(".table-card table tbody");
+	  const pagination = document.querySelector(".pagination");
+	  const initialBody = tbody ? tbody.innerHTML : "";
+	  const initialPagination = pagination ? pagination.innerHTML : "";
+	  const initialPaginationDisplay = pagination ? pagination.style.display : "";
+	  let searchController = null;
+	  let searchTimer;
+
 	  const bankOptions = Array.from(document.querySelectorAll("#withdraw-bank-options option")).map(opt => ({
 		id: opt.dataset.id || opt.value,
 		label: opt.value
 	  }));
 
-	  function navigateWithFilters() {
+	  function setUrlQuery(term) {
+		const params = new URLSearchParams();
+		const d = wd?.value || "";
+		const bank = bankHidden?.value || "";
+		const perPage = perPageSelect?.value || "";
+		if (d) params.set("date", d);
+		if (bank) params.set("bank", bank);
+		if (term) params.set("q", term);
+		if (perPage) params.set("per_page", perPage);
+		const query = params.toString();
+		const url = query ? `/withdraw/?${query}` : "/withdraw/";
+		window.history.replaceState({}, "", url);
+	  }
+
+	  function buildSearchParams(term) {
 		const params = new URLSearchParams();
 		const d = wd?.value || "";
 		const bank = bankHidden?.value || "";
 		if (d) params.set("date", d);
 		if (bank) params.set("bank", bank);
+		if (term) params.set("q", term);
+		return params;
+	  }
+
+	  function togglePagination(show) {
+		if (!pagination) return;
+		pagination.style.display = show ? initialPaginationDisplay || "" : "none";
+	  }
+
+	  function togglePerPage(show) {
+		if (!perPageLabel) return;
+		perPageLabel.style.display = show ? "" : "none";
+	  }
+
+	  function renderRows(items) {
+		if (!tbody) return;
+		if (!items.length) {
+		  tbody.innerHTML = "<tr><td colspan=\"8\">No cards to withdraw for this date.</td></tr>";
+		  return;
+		}
+		tbody.innerHTML = items.map(item => {
+		  const cardLabel = escapeHtml(item.card_label);
+		  const pin = escapeHtml(item.pin);
+		  const shouldRaw = item.should_have || "0";
+		  const remainingRaw = item.remaining || "0";
+		  const should = formatNumber(parseNumber(shouldRaw));
+		  const remaining = formatNumber(parseNumber(remainingRaw));
+		  const fullAttr = item.fully_withdrawn ? "checked" : "";
+		  const disabledAttr = item.fully_withdrawn ? "disabled" : "";
+		  const withdrawnVal = item.withdrawn_rub ? formatNumber(parseNumber(item.withdrawn_rub)) : "";
+		  const commissionVal = item.commission_rub ? formatNumber(parseNumber(item.commission_rub)) : "";
+		  const note = item.note || "";
+		  const notePreview = note ? escapeHtml(note) : "No note";
+		  const noteLabel = note ? "Edit note" : "Add note";
+		  const noteClass = note ? "note-cell has-note" : "note-cell";
+		  return `
+			<tr data-card-id="${escapeHtml(item.card_id)}" data-should="${escapeHtml(shouldRaw)}">
+			  <td class="col-card">${cardLabel}</td>
+			  <td><b>${pin}</b></td>
+			  <td class="num col-money"><b>${should} ₽</b></td>
+			  <td class="col-full">
+				<input type="checkbox" class="full" ${fullAttr}>
+			  </td>
+			  <td class="num col-money-input">
+				<input type="text" inputmode="decimal" class="withdrawn" value="${escapeHtml(withdrawnVal)}" ${disabledAttr}>
+			  </td>
+			  <td class="num col-money-input">
+				<input type="text" inputmode="decimal" class="commission" value="${escapeHtml(commissionVal)}">
+			  </td>
+			  <td class="num col-money"><b class="remaining-value">${remaining} ₽</b></td>
+			  <td>
+				<div class="${noteClass}">
+				  <div class="note-preview">${notePreview}</div>
+				  <button type="button" class="note-trigger">${noteLabel}</button>
+				  <input type="hidden" class="note note-input" value="${escapeHtml(note)}">
+				</div>
+			  </td>
+			</tr>
+		  `;
+		}).join("");
+	  }
+
+	  function restoreInitial() {
+		if (tbody) tbody.innerHTML = initialBody;
+		if (pagination) pagination.innerHTML = initialPagination;
+		togglePagination(true);
+		togglePerPage(true);
+		bindRows();
+		bindNotes();
+		refreshTotals();
+	  }
+
+	  function applySearch() {
+		if (!searchInput) return;
+		const term = searchInput.value.trim();
+		setUrlQuery(term);
+		if (!term) {
+		  restoreInitial();
+		  return;
+		}
+		togglePagination(false);
+		togglePerPage(false);
+		if (searchController) searchController.abort();
+		searchController = new AbortController();
+		const params = buildSearchParams(term);
+		fetch(`/withdraw/search/?${params.toString()}`, { signal: searchController.signal })
+		  .then(resp => resp.ok ? resp.json() : { results: [] })
+		  .then(data => {
+			renderRows(data.results || []);
+			bindRows();
+			bindNotes();
+			refreshTotals();
+		  })
+		  .catch(() => {});
+	  }
+
+	  function navigateWithFilters() {
+		if (searchInput && searchInput.value.trim()) {
+		  applySearch();
+		  return;
+		}
+		const params = new URLSearchParams();
+		const d = wd?.value || "";
+		const bank = bankHidden?.value || "";
+		const perPage = perPageSelect?.value || "";
+		if (d) params.set("date", d);
+		if (bank) params.set("bank", bank);
+		if (perPage) params.set("per_page", perPage);
 		const url = `/withdraw/?${params.toString()}`;
 
 		if (inFlight > 0) {
@@ -388,6 +600,20 @@
 
 	  if (wd) {
 		wd.addEventListener("change", navigateWithFilters);
+	  }
+	  if (perPageSelect) {
+		perPageSelect.addEventListener("change", navigateWithFilters);
+	  }
+	  if (searchInput) {
+		searchInput.addEventListener("keydown", (e) => {
+		  if (e.key === "Enter") {
+			e.preventDefault();
+		  }
+		});
+		searchInput.addEventListener("input", () => {
+		  window.clearTimeout(searchTimer);
+		  searchTimer = window.setTimeout(applySearch, 200);
+		});
 	  }
 	  if (bankHidden && bankInput && bankDropdown) {
 		const filterOptions = term => {

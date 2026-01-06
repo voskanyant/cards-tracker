@@ -11,7 +11,7 @@
     </div>
     <a href="/cards/" class="pill">Back to cards</a>
   </div>
-  <form method="get" style="margin-top:12px; display:flex; gap:12px; flex-wrap:wrap; align-items:flex-end;">
+  <form method="get" style="margin-top:12px; display:flex; gap:12px; flex-wrap:wrap; align-items:flex-end; width:100%;">
     <label style="display:flex; flex-direction:column;">
       <span>From</span>
       <div class="date-field">
@@ -26,22 +26,18 @@
         <button type="button" class="calendar-toggle" aria-label="Open calendar">&#128197;</button>
       </div>
     </label>
-    <div>
-      <button type="submit">Apply</button>
-      <a href="/cards/{{ card.id }}/history/" style="margin-left:8px;">Reset</a>
-    </div>
   </form>
   <div class="table-card" style="margin-top:16px;">
     <table>
       <thead>
-        <tr><th>Total received</th><th>Total withdrawn</th><th>Total commission</th><th>Balance</th></tr>
+        <tr><th>Total received ₽</th><th>Total withdrawn ₽</th><th>Total commission ₽</th><th>Balance ₽</th></tr>
       </thead>
       <tbody>
         <tr>
-          <td>{{ received_total|spaced_number }}</td>
-          <td>{{ withdrawn_total|spaced_number }}</td>
-          <td>{{ commission_total|spaced_number }}</td>
-          <td>{{ balance_total|spaced_number }}</td>
+          <td data-total="received">{{ received_total|spaced_number }} ₽</td>
+          <td data-total="withdrawn">{{ withdrawn_total|spaced_number }} ₽</td>
+          <td data-total="commission">{{ commission_total|spaced_number }} ₽</td>
+          <td data-total="balance">{{ balance_total|spaced_number }} ₽</td>
         </tr>
       </tbody>
     </table>
@@ -53,15 +49,15 @@
   <div class="table-card table-scroll" style="margin-top:12px;">
     <table>
       <thead>
-        <tr><th>Time</th><th>Client</th><th>RUB</th><th>USD</th><th>Note</th></tr>
+        <tr><th>Time</th><th>Client</th><th>RUB ₽</th><th>USD $</th><th>Note</th></tr>
       </thead>
-      <tbody>
+      <tbody class="history-transactions">
         {% for t in transactions %}
           <tr>
             <td>{{ t.timestamp|date:"d/m/Y, H:i" }}</td>
             <td>{{ t.client.name }}</td>
-            <td>{{ t.amount_rub|spaced_number }}</td>
-            <td>{{ t.amount_usd|spaced_number }}</td>
+            <td>{{ t.amount_rub|spaced_number }} ₽</td>
+            <td>{{ t.amount_usd|spaced_number }} $</td>
             <td>{{ t.notes|default:"-" }}</td>
           </tr>
         {% empty %}
@@ -77,15 +73,15 @@
   <div class="table-card table-scroll" style="margin-top:12px;">
     <table>
       <thead>
-        <tr><th>Date</th><th>Status</th><th>Amount</th><th>Commission</th><th>Note</th></tr>
+        <tr><th>Date</th><th>Status</th><th>Amount ₽</th><th>Commission ₽</th><th>Note</th></tr>
       </thead>
-      <tbody>
+      <tbody class="history-withdrawals">
         {% for wd in withdrawals %}
           <tr>
             <td>{{ wd.date|date:"d/m/Y" }}</td>
             <td>{% if wd.fully %}Full{% else %}Partial{% endif %}</td>
-            <td>{{ wd.amount|spaced_number }}</td>
-            <td>{{ wd.commission|spaced_number }}</td>
+            <td>{{ wd.amount|spaced_number }} ₽</td>
+            <td>{{ wd.commission|spaced_number }} ₽</td>
             <td>{{ wd.note|default:"-" }}</td>
           </tr>
         {% empty %}
@@ -95,4 +91,125 @@
     </table>
   </div>
 </section>
+<script>
+  (function () {
+    const startInput = document.querySelector("input[name='start']");
+    const endInput = document.querySelector("input[name='end']");
+    const totalsRow = document.querySelector("tbody");
+    const txBody = document.querySelector(".history-transactions");
+    const wdBody = document.querySelector(".history-withdrawals");
+    const cardId = "{{ card.id }}";
+    if (!startInput || !endInput || !txBody || !wdBody) return;
+
+    const initialTotals = totalsRow ? totalsRow.innerHTML : "";
+    const initialTx = txBody.innerHTML;
+    const initialWd = wdBody.innerHTML;
+    let controller = null;
+
+    function escapeHtml(value) {
+      return String(value || "")
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#039;");
+    }
+
+    function buildParams() {
+      const params = new URLSearchParams();
+      const start = startInput.value.trim();
+      const end = endInput.value.trim();
+      if (start) params.set("start", start);
+      if (end) params.set("end", end);
+      return params;
+    }
+
+    function renderTotals(totals) {
+      if (!totalsRow || !totals) return;
+      const received = totalsRow.querySelector("[data-total='received']");
+      const withdrawn = totalsRow.querySelector("[data-total='withdrawn']");
+      const commission = totalsRow.querySelector("[data-total='commission']");
+      const balance = totalsRow.querySelector("[data-total='balance']");
+      if (received) received.textContent = totals.received ? `${totals.received} ₽` : "";
+      if (withdrawn) withdrawn.textContent = totals.withdrawn ? `${totals.withdrawn} ₽` : "";
+      if (commission) commission.textContent = totals.commission ? `${totals.commission} ₽` : "";
+      if (balance) balance.textContent = totals.balance ? `${totals.balance} ₽` : "";
+    }
+
+    function renderTransactions(items) {
+      if (!items.length) {
+        txBody.innerHTML = "<tr><td colspan=\"5\">No transactions recorded for this card.</td></tr>";
+        return;
+      }
+      txBody.innerHTML = items.map(tx => `
+        <tr>
+          <td>${escapeHtml(tx.time)}</td>
+          <td>${escapeHtml(tx.client)}</td>
+          <td>${escapeHtml(tx.rub)} ₽</td>
+          <td>${escapeHtml(tx.usd)} $</td>
+          <td>${escapeHtml(tx.note || "-")}</td>
+        </tr>
+      `).join("");
+    }
+
+    function renderWithdrawals(items) {
+      if (!items.length) {
+        wdBody.innerHTML = "<tr><td colspan=\"5\">No withdrawals logged for this card.</td></tr>";
+        return;
+      }
+      wdBody.innerHTML = items.map(wd => `
+        <tr>
+          <td>${escapeHtml(wd.date)}</td>
+          <td>${escapeHtml(wd.status)}</td>
+          <td>${escapeHtml(wd.amount)} ₽</td>
+          <td>${escapeHtml(wd.commission)} ₽</td>
+          <td>${escapeHtml(wd.note || "-")}</td>
+        </tr>
+      `).join("");
+    }
+
+    function restoreInitial() {
+      if (totalsRow) totalsRow.innerHTML = initialTotals;
+      txBody.innerHTML = initialTx;
+      wdBody.innerHTML = initialWd;
+    }
+
+    function applyFilters() {
+      const params = buildParams();
+      if (!params.toString()) {
+        restoreInitial();
+        return;
+      }
+      if (controller) controller.abort();
+      controller = new AbortController();
+      fetch(`/cards/${cardId}/history/search/?${params.toString()}`, { signal: controller.signal })
+        .then(resp => resp.ok ? resp.json() : { totals: null, transactions: [], withdrawals: [] })
+        .then(data => {
+          renderTotals(data.totals || null);
+          renderTransactions(data.transactions || []);
+          renderWithdrawals(data.withdrawals || []);
+        })
+        .catch(() => {});
+    }
+
+    function bindDateInput(input) {
+      input.addEventListener("change", applyFilters);
+      input.addEventListener("input", () => {
+        if (!input.value.trim()) {
+          applyFilters();
+        }
+      });
+    }
+
+    bindDateInput(startInput);
+    bindDateInput(endInput);
+    document.addEventListener("click", (event) => {
+      const target = event.target;
+      if (target && target.matches("button[data-action='clear']")) {
+        setTimeout(applyFilters, 0);
+      }
+    });
+    applyFilters();
+  })();
+</script>
 {% endblock %}

@@ -1,7 +1,10 @@
 {% extends "core/base.html" %}
 {% load formatting %}
 {% block content %}
-<h2>Transactions</h2>
+<div style="display:flex; flex-wrap:wrap; justify-content:space-between; gap:12px; align-items:center;">
+  <h2 style="margin:0;">Transactions</h2>
+  <a href="/transactions/export/{% if start or end or query %}?{% endif %}{% if start %}start={{ start|urlencode }}{% if end or query %}&{% endif %}{% endif %}{% if end %}end={{ end|urlencode }}{% if query %}&{% endif %}{% endif %}{% if query %}q={{ query|urlencode }}{% endif %}">Export CSV</a>
+</div>
 
 <section class="add-transaction section-card">
   <h3 style="margin-top:0;">Add Transaction</h3>
@@ -9,7 +12,9 @@
     {% csrf_token %}
     {{ form.non_field_errors }}
     {% for field in form %}
-      {% if field.name == "card" %}
+      {% if field.name == "tz_offset" or field.name == "original_timestamp" or field.name == "timestamp_initial" %}
+        {{ field.as_hidden }}
+      {% elif field.name == "card" %}
         <label style="display:flex; flex-direction:column; min-width:200px; flex:1;">
           <span>{{ field.label }}{% if field.field.required %} *{% endif %}</span>
           <div class="combo-wrapper">
@@ -62,7 +67,10 @@
       {% elif field.name == "amount_rub" or field.name == "amount_usd" %}
         <label style="display:flex; flex-direction:column; min-width:130px; flex:0.45;">
           <span>{{ field.label }}{% if field.field.required %} *{% endif %}</span>
-          {{ field }}
+          <div class="currency-input">
+            <span class="currency-prefix">{% if field.name == "amount_rub" %}₽{% else %}${% endif %}</span>
+            {{ field }}
+          </div>
           {% if field.errors %}
             <small style="color:#c00;">{{ field.errors|join:", " }}</small>
           {% endif %}
@@ -109,26 +117,34 @@
       <button type="button" class="calendar-toggle" aria-label="Open calendar">&#128197;</button>
     </div>
   </label>
-  <div>
-    <button type="submit">Apply</button>
-    <a href="/transactions/?clear=1" style="margin-left:8px;">Reset</a>
-  </div>
+  <label style="display:flex; flex-direction:column; min-width:200px; flex:1;">
+    <span>Search</span>
+    <input type="text" name="q" placeholder="Search client/card/notes..." value="{{ query }}">
+  </label>
+  <label class="transactions-per-page" style="display:flex; flex-direction:column; min-width:140px;">
+    <span>Per page</span>
+    <select name="per_page">
+      {% for option in per_page_choices %}
+        <option value="{{ option }}" {% if option == per_page %}selected{% endif %}>{{ option }}</option>
+      {% endfor %}
+    </select>
+  </label>
 </form>
 
 <div class="table-card table-scroll">
 <table>
   <thead>
-    <tr><th>Time</th><th>Client</th><th>RUB</th><th>USD</th><th>Card</th><th>Rate</th><th>Actions</th></tr>
+    <tr><th>Time</th><th>Client</th><th>RUB ₽</th><th>USD $</th><th>Card</th><th>Rate ₽</th><th>Actions</th></tr>
   </thead>
   <tbody>
     {% for t in page_obj %}
       <tr>
-        <td>{{ t.timestamp|date:"d/m/Y, H:i" }}</td>
+        <td data-utc="{{ t.timestamp|date:'c' }}"></td>
         <td>{{ t.client.name }}</td>
-        <td>{{ t.amount_rub|spaced_number }}</td>
-        <td>{{ t.amount_usd|spaced_number }}</td>
+        <td>{{ t.amount_rub|spaced_number }} ₽</td>
+        <td>{{ t.amount_usd|spaced_number }} $</td>
         <td>{{ t.card.name }}</td>
-        <td>{{ t.rate|spaced_number }}</td>
+        <td>{{ t.rate|spaced_number }} ₽</td>
         <td>
           <a href="/transactions/{{ t.id }}/edit/">Edit</a>
           <form method="post" action="{% url 'transaction_delete' t.id %}" style="display:inline;" onsubmit="return confirm('Delete this transaction?');">
@@ -146,13 +162,23 @@
 </div>
 
 {% if page_obj.has_other_pages %}
-  <div class="pagination" style="margin-top:16px; display:flex; gap:8px; flex-wrap:wrap;">
+  <div class="pagination" style="margin-top:16px; display:flex; gap:8px; flex-wrap:wrap; align-items:center;">
     {% if page_obj.has_previous %}
-      <a href="?{% if start %}start={{ start }}&{% endif %}{% if end %}end={{ end }}&{% endif %}page={{ page_obj.previous_page_number }}">« Prev</a>
+      <a href="?{% if start %}start={{ start|urlencode }}&{% endif %}{% if end %}end={{ end|urlencode }}&{% endif %}{% if query %}q={{ query|urlencode }}&{% endif %}per_page={{ per_page }}&page={{ page_obj.previous_page_number }}">Prev</a>
     {% endif %}
-    <span>Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}</span>
+    {% for num in page_items %}
+      {% if num %}
+        {% if num == page_obj.number %}
+          <span style="padding:4px 8px; border-radius:8px; background:#e2e8f0; font-weight:600;">{{ num }}</span>
+        {% else %}
+          <a href="?{% if start %}start={{ start|urlencode }}&{% endif %}{% if end %}end={{ end|urlencode }}&{% endif %}{% if query %}q={{ query|urlencode }}&{% endif %}per_page={{ per_page }}&page={{ num }}" style="padding:4px 8px;">{{ num }}</a>
+        {% endif %}
+      {% else %}
+        <span style="padding:4px 6px; color:var(--muted);">...</span>
+      {% endif %}
+    {% endfor %}
     {% if page_obj.has_next %}
-      <a href="?{% if start %}start={{ start }}&{% endif %}{% if end %}end={{ end }}&{% endif %}page={{ page_obj.next_page_number }}">Next »</a>
+      <a href="?{% if start %}start={{ start|urlencode }}&{% endif %}{% if end %}end={{ end|urlencode }}&{% endif %}{% if query %}q={{ query|urlencode }}&{% endif %}per_page={{ per_page }}&page={{ page_obj.next_page_number }}">Next</a>
     {% endif %}
   </div>
 {% endif %}
@@ -242,6 +268,208 @@
       });
 
       syncFromHidden();
+    });
+  })();
+</script>
+<script>
+  (function () {
+    const searchInput = document.querySelector("input[name='q']");
+    const tbody = document.querySelector(".table-card table tbody");
+    const pagination = document.querySelector(".pagination");
+    const perPageLabel = document.querySelector(".transactions-per-page");
+    const exportLink = document.querySelector("a[href^='/transactions/export/']");
+    if (!searchInput || !tbody) return;
+
+    const initialBody = tbody.innerHTML;
+    const initialPagination = pagination ? pagination.innerHTML : "";
+    const initialPaginationDisplay = pagination ? pagination.style.display : "";
+    const initialExport = exportLink ? exportLink.href : "";
+    let controller = null;
+    let timer;
+
+    function escapeHtml(value) {
+      return String(value || "")
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#039;");
+    }
+
+    function getCookie(name) {
+      const value = `; ${document.cookie}`;
+      const parts = value.split(`; ${name}=`);
+      if (parts.length === 2) {
+        return parts.pop().split(";").shift();
+      }
+      return "";
+    }
+
+    function getValue(selector) {
+      const el = document.querySelector(selector);
+      return el ? el.value.trim() : "";
+    }
+
+    function buildParams(includeQuery) {
+      const params = new URLSearchParams();
+      const start = getValue("input[name='start']");
+      const end = getValue("input[name='end']");
+      const query = includeQuery ? searchInput.value.trim() : "";
+      if (start) params.set("start", start);
+      if (end) params.set("end", end);
+      if (query) params.set("q", query);
+      return params;
+    }
+
+    function updateExportLink(queryParams) {
+      if (!exportLink) return;
+      const query = queryParams.toString();
+      exportLink.href = query ? `/transactions/export/?${query}` : "/transactions/export/";
+    }
+
+    function renderRows(items) {
+      if (!items.length) {
+        tbody.innerHTML = "<tr><td colspan=\"7\">No transactions match the search.</td></tr>";
+        return;
+      }
+      const csrf = getCookie("csrftoken");
+      const nextValue = window.location.pathname + window.location.search;
+      tbody.innerHTML = items
+        .map(tx => {
+          const id = escapeHtml(tx.id);
+          const client = escapeHtml(tx.client);
+          const card = escapeHtml(tx.card);
+          const rub = escapeHtml(tx.rub);
+          const usd = escapeHtml(tx.usd);
+          const rate = escapeHtml(tx.rate);
+          const timeIso = escapeHtml(tx.time_iso);
+          return `
+            <tr>
+              <td data-utc="${timeIso}"></td>
+              <td>${client}</td>
+              <td>${rub} ₽</td>
+              <td>${usd} $</td>
+              <td>${card}</td>
+              <td>${rate} ₽</td>
+              <td>
+                <a href="/transactions/${id}/edit/">Edit</a>
+                <form method="post" action="/transactions/${id}/delete/" style="display:inline;" onsubmit="return confirm('Delete this transaction?');">
+                  <input type="hidden" name="csrfmiddlewaretoken" value="${csrf}">
+                  <input type="hidden" name="next" value="${escapeHtml(nextValue)}">
+                  <button type="submit" style="background:none;border:none;color:#c00;padding:0 0 0 8px;cursor:pointer;font:inherit;">Delete</button>
+                </form>
+              </td>
+            </tr>
+          `;
+        })
+        .join("");
+    }
+
+    function togglePagination(show) {
+      if (!pagination) return;
+      pagination.style.display = show ? initialPaginationDisplay || "" : "none";
+    }
+
+    function togglePerPage(show) {
+      if (!perPageLabel) return;
+      perPageLabel.style.display = show ? "" : "none";
+    }
+
+    function restoreInitial() {
+      tbody.innerHTML = initialBody;
+      if (pagination) pagination.innerHTML = initialPagination;
+      if (exportLink && initialExport) exportLink.href = initialExport;
+      togglePagination(true);
+      togglePerPage(true);
+      formatUtcCells();
+    }
+
+    function formatUtcCells() {
+      const offsetCookie = getCookie("tz_offset");
+      const offsetMinutes = offsetCookie ? parseInt(offsetCookie, 10) : new Date().getTimezoneOffset();
+      document.querySelectorAll("td[data-utc]").forEach(cell => {
+        const raw = cell.getAttribute("data-utc");
+        if (!raw) return;
+        const date = new Date(raw);
+        if (Number.isNaN(date.getTime())) return;
+        const offset = Number.isNaN(offsetMinutes) ? new Date().getTimezoneOffset() : offsetMinutes;
+        const localMillis = date.getTime() - offset * 60000;
+        const localDate = new Date(localMillis);
+        const dd = String(localDate.getUTCDate()).padStart(2, "0");
+        const mm = String(localDate.getUTCMonth() + 1).padStart(2, "0");
+        const yyyy = localDate.getUTCFullYear();
+        const hh = String(localDate.getUTCHours()).padStart(2, "0");
+        const min = String(localDate.getUTCMinutes()).padStart(2, "0");
+        cell.textContent = `${dd}/${mm}/${yyyy} ${hh}:${min}`;
+      });
+    }
+
+    function applyFilters() {
+      const start = getValue("input[name='start']");
+      const end = getValue("input[name='end']");
+      const term = searchInput.value.trim();
+      const hasFilters = Boolean(start || end || term);
+      updateExportLink(buildParams(hasFilters));
+      if (!hasFilters) {
+        restoreInitial();
+        return;
+      }
+      togglePagination(false);
+      togglePerPage(false);
+      if (controller) controller.abort();
+      controller = new AbortController();
+      const params = buildParams(true);
+      fetch(`/transactions/search/?${params.toString()}`, { signal: controller.signal })
+        .then(resp => resp.ok ? resp.json() : { results: [] })
+        .then(data => {
+          renderRows(data.results || []);
+          formatUtcCells();
+        })
+        .catch(() => {});
+    }
+
+    searchInput.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") {
+        e.preventDefault();
+      }
+    });
+    searchInput.addEventListener("input", () => {
+      window.clearTimeout(timer);
+      timer = window.setTimeout(applyFilters, 200);
+    });
+    const startInput = document.querySelector("input[name='start']");
+    const endInput = document.querySelector("input[name='end']");
+    if (startInput) {
+      startInput.addEventListener("change", applyFilters);
+      startInput.addEventListener("input", () => {
+        if (!startInput.value.trim()) {
+          applyFilters();
+        }
+      });
+    }
+    if (endInput) {
+      endInput.addEventListener("change", applyFilters);
+      endInput.addEventListener("input", () => {
+        if (!endInput.value.trim()) {
+          applyFilters();
+        }
+      });
+    }
+    document.addEventListener("click", (event) => {
+      const target = event.target;
+      if (target && target.matches("button[data-action='clear']")) {
+        setTimeout(applyFilters, 0);
+      }
+    });
+    formatUtcCells();
+    applyFilters();
+  })();
+</script>
+<script>
+  (function () {
+    const offset = new Date().getTimezoneOffset();
+    document.querySelectorAll(".js-tz-offset").forEach(input => {
+      input.value = offset;
     });
   })();
 </script>

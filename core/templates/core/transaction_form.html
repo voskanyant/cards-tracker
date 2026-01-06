@@ -4,7 +4,35 @@
 
 <form method="post" style="max-width:600px;">
   {% csrf_token %}
-  {{ form.as_p }}
+  {{ form.non_field_errors }}
+  {% for field in form %}
+    {% if field.name == "tz_offset" or field.name == "original_timestamp" or field.name == "timestamp_initial" %}
+      {{ field.as_hidden }}
+    {% elif field.name == "amount_rub" or field.name == "amount_usd" %}
+      <p>
+        <label>
+          {{ field.label }}{% if field.field.required %} *{% endif %}<br>
+          <div class="currency-input">
+            <span class="currency-prefix">{% if field.name == "amount_rub" %}₽{% else %}${% endif %}</span>
+            {{ field }}
+          </div>
+        </label>
+        {% if field.errors %}
+          <small style="color:#c00;">{{ field.errors|join:", " }}</small>
+        {% endif %}
+      </p>
+    {% else %}
+      <p>
+        <label>
+          {{ field.label }}{% if field.field.required %} *{% endif %}<br>
+          {{ field }}
+        </label>
+        {% if field.errors %}
+          <small style="color:#c00;">{{ field.errors|join:", " }}</small>
+        {% endif %}
+      </p>
+    {% endif %}
+  {% endfor %}
   <button type="submit">Save</button>
 </form>
 
@@ -25,6 +53,56 @@
   if (rub && usd && rate) {
     rub.addEventListener("input", calcRate);
     usd.addEventListener("input", calcRate);
+  }
+
+  const offset = new Date().getTimezoneOffset();
+  document.querySelectorAll(".js-tz-offset").forEach(input => {
+    input.value = offset;
+  });
+
+  function parseNumber(value) {
+    if (typeof value === "number") {
+      return Number.isFinite(value) ? value : 0;
+    }
+    if (value === undefined || value === null) return 0;
+    const normalized = String(value).replace(/\s+/g, "").replace(",", ".");
+    const parsed = parseFloat(normalized);
+    return Number.isFinite(parsed) ? parsed : 0;
+  }
+
+  function normalizeNumberString(value) {
+    if (value === undefined || value === null) return "";
+    return String(value).replace(/\s+/g, "").replace(",", ".");
+  }
+
+  function formatNumber(value) {
+    const rounded = Math.round((value + Number.EPSILON) * 100) / 100;
+    let [intPart, fracPart] = rounded.toFixed(2).split(".");
+    const sign = intPart.startsWith("-") ? "-" : "";
+    intPart = intPart.replace("-", "");
+    intPart = intPart.replace(/\B(?=(\d{3})+(?!\d))/g, " ");
+    fracPart = fracPart.replace(/0+$/, "");
+    const formattedInt = `${sign}${intPart || "0"}`;
+    return fracPart ? `${formattedInt}.${fracPart}` : formattedInt;
+  }
+
+  [rub, usd].forEach(input => {
+    if (!input) return;
+    if (input.value) {
+      input.value = formatNumber(parseNumber(input.value));
+    }
+    input.addEventListener("blur", () => {
+      if (!input.value) return;
+      input.value = formatNumber(parseNumber(input.value));
+    });
+  });
+
+  const form = document.querySelector("form");
+  if (form) {
+    form.addEventListener("submit", () => {
+      if (rub) rub.value = normalizeNumberString(rub.value);
+      if (usd) usd.value = normalizeNumberString(usd.value);
+    });
   }
 </script>
 {% endblock %}
