@@ -186,6 +186,14 @@
       cursor: pointer;
       color: var(--primary);
     }
+    .withdraw-edit {
+      background: transparent;
+      border: none;
+      padding: 0;
+      margin-left: 6px;
+      font-size: 0.9rem;
+      line-height: 1;
+    }
     .note-modal {
       position: fixed;
       inset: 0;
@@ -271,7 +279,7 @@
       box-shadow: 0 20px 40px rgba(15, 23, 42, 0.15);
       width: 270px;
       padding: 12px;
-      z-index: 50;
+      z-index: 120;
       display: none;
     }
     .calendar-header {
@@ -715,6 +723,7 @@
           const headerRow = head ? head.rows[0] : table.rows[0];
           if (!headerRow) return;
           Array.from(headerRow.cells).forEach((th, idx) => {
+            if (th.getAttribute("data-sortable") === "false") return;
             th.addEventListener("click", () => sortTable(table, idx, th));
           });
         });

@@ -6,7 +6,7 @@
     <div>
       <h2 style="margin:0;">{{ card.name }}</h2>
       <p style="margin:4px 0; color:var(--muted);">
-        Bank: {{ card.bank|default:"N/A" }} • Group: {% if card.group %}{{ card.group.name }}{% else %}-{% endif %} • Number: {{ card.card_number|default:"N/A" }} • PIN: {{ card.pin|default:"-" }}
+        Bank: {{ card.bank|default:"N/A" }} | Group: {% if card.group %}{{ card.group.name }}{% else %}-{% endif %} | Number: {{ card.card_number|default:"N/A" }} | PIN: {{ card.pin|default:"-" }}
       </p>
     </div>
     <a href="/cards/" class="pill">Back to cards</a>
@@ -26,18 +26,30 @@
         <button type="button" class="calendar-toggle" aria-label="Open calendar">&#128197;</button>
       </div>
     </label>
+    <label style="display:flex; flex-direction:column; min-width:160px;">
+      <span>Type</span>
+      <select name="type">
+        <option value="" {% if not type_filter %}selected{% endif %}>All</option>
+        <option value="transaction" {% if type_filter == "transaction" %}selected{% endif %}>Transactions</option>
+        <option value="withdrawal" {% if type_filter == "withdrawal" %}selected{% endif %}>Withdrawals</option>
+      </select>
+    </label>
+    <label style="display:flex; flex-direction:column; min-width:220px; flex:1;">
+      <span>Search</span>
+      <input type="text" name="q" placeholder="Search client/notes..." value="{{ query }}">
+    </label>
   </form>
   <div class="table-card" style="margin-top:16px;">
     <table>
       <thead>
-        <tr><th>Total received ₽</th><th>Total withdrawn ₽</th><th>Total commission ₽</th><th>Balance ₽</th></tr>
+        <tr><th>Total received &#8381;</th><th>Total withdrawn &#8381;</th><th>Total commission &#8381;</th><th>Balance &#8381;</th></tr>
       </thead>
       <tbody>
         <tr>
-          <td data-total="received">{{ received_total|spaced_number }} ₽</td>
-          <td data-total="withdrawn">{{ withdrawn_total|spaced_number }} ₽</td>
-          <td data-total="commission">{{ commission_total|spaced_number }} ₽</td>
-          <td data-total="balance">{{ balance_total|spaced_number }} ₽</td>
+          <td data-total="received">{{ received_total|spaced_number }} &#8381;</td>
+          <td data-total="withdrawn">{{ withdrawn_total|spaced_number }} &#8381;</td>
+          <td data-total="commission">{{ commission_total|spaced_number }} &#8381;</td>
+          <td data-total="balance">{{ balance_total|spaced_number }} &#8381;</td>
         </tr>
       </tbody>
     </table>
@@ -45,66 +57,82 @@
 </section>
 
 <section class="section-card">
-  <h3 style="margin-top:0;">Transactions</h3>
+  <h3 style="margin-top:0;">History</h3>
   <div class="table-card table-scroll" style="margin-top:12px;">
     <table>
       <thead>
-        <tr><th>Time</th><th>Client</th><th>RUB ₽</th><th>USD $</th><th>Note</th></tr>
+        <tr>
+          <th>Time</th>
+          <th data-sortable="false">Type</th>
+          <th data-sortable="false">Client</th>
+          <th data-sortable="false">RUB &#8381;</th>
+          <th data-sortable="false">USD $</th>
+          <th data-sortable="false">Taken &#8381;</th>
+          <th data-sortable="false">Fee &#8381;</th>
+          <th data-sortable="false">Balance &#8381;</th>
+          <th data-sortable="false">Note</th>
+        </tr>
       </thead>
-      <tbody class="history-transactions">
-        {% for t in transactions %}
+      <tbody class="history-events">
+        {% for item in events %}
           <tr>
-            <td>{{ t.timestamp|date:"d/m/Y, H:i" }}</td>
-            <td>{{ t.client.name }}</td>
-            <td>{{ t.amount_rub|spaced_number }} ₽</td>
-            <td>{{ t.amount_usd|spaced_number }} $</td>
-            <td>{{ t.notes|default:"-" }}</td>
+            <td data-utc="{{ item.time_iso }}"><span class="time-text">{{ item.time_display }}</span>{% if item.kind == "withdrawal" %}<button type="button" class="note-trigger withdraw-edit" onclick="openWithdrawTimeModal(this);return false;" data-withdraw-id="{{ item.withdrawal_id }}" data-withdraw-time="{{ item.time_display }}" data-withdraw-iso="{{ item.time_iso }}" aria-label="Edit withdrawal time">&#9998;</button>{% endif %}</td>
+            <td>{% if item.kind == "transaction" %}Transaction{% else %}Withdrawal{% endif %}</td>
+            <td>{{ item.client|default:"-" }}</td>
+            <td>{% if item.rub %}{{ item.rub|spaced_number }} &#8381;{% else %}-{% endif %}</td>
+            <td>{% if item.usd %}{{ item.usd|spaced_number }} ${% else %}-{% endif %}</td>
+            <td>{% if item.withdrawn %}{{ item.withdrawn|spaced_number }} &#8381;{% else %}-{% endif %}</td>
+            <td>{% if item.commission %}{{ item.commission|spaced_number }} &#8381;{% else %}-{% endif %}</td>
+            <td>{{ item.balance|spaced_number }} &#8381;</td>
+            <td>{{ item.note|default:"-" }}</td>
           </tr>
         {% empty %}
-          <tr><td colspan="5">No transactions recorded for this card.</td></tr>
+          <tr><td colspan="9">No history recorded for this card.</td></tr>
         {% endfor %}
       </tbody>
     </table>
   </div>
 </section>
 
-<section class="section-card">
-  <h3 style="margin-top:0;">Withdrawals Log</h3>
-  <div class="table-card table-scroll" style="margin-top:12px;">
-    <table>
-      <thead>
-        <tr><th>Date</th><th>Status</th><th>Amount ₽</th><th>Commission ₽</th><th>Note</th></tr>
-      </thead>
-      <tbody class="history-withdrawals">
-        {% for wd in withdrawals %}
-          <tr>
-            <td>{{ wd.date|date:"d/m/Y" }}</td>
-            <td>{% if wd.fully %}Full{% else %}Partial{% endif %}</td>
-            <td>{{ wd.amount|spaced_number }} ₽</td>
-            <td>{{ wd.commission|spaced_number }} ₽</td>
-            <td>{{ wd.note|default:"-" }}</td>
-          </tr>
-        {% empty %}
-          <tr><td colspan="5">No withdrawals logged for this card.</td></tr>
-        {% endfor %}
-      </tbody>
-    </table>
+<div class="note-modal" id="withdraw-time-modal">
+  <div class="note-modal-content">
+    <h3>Edit Withdrawal Time</h3>
+    <div>
+      <label>
+        <span>Date & Time</span>
+        <div class="date-field">
+          <input type="text" id="withdraw-time-input" placeholder="dd/mm/yyyy HH:MM" autocomplete="off" inputmode="numeric" class="date-input js-datetime-input">
+          <button type="button" class="calendar-toggle" aria-label="Open calendar">&#128197;</button>
+        </div>
+      </label>
+    </div>
+    <div class="note-modal-actions">
+      <div></div>
+      <div class="note-modal-actions-right">
+        <button type="button" data-withdraw-time-action="cancel">Cancel</button>
+        <button type="button" data-withdraw-time-action="save" class="primary">Save</button>
+      </div>
+    </div>
   </div>
-</section>
+</div>
+
 <script>
   (function () {
+    const RUB = "\u20BD";
     const startInput = document.querySelector("input[name='start']");
     const endInput = document.querySelector("input[name='end']");
+    const typeSelect = document.querySelector("select[name='type']");
+    const searchInput = document.querySelector("input[name='q']");
     const totalsRow = document.querySelector("tbody");
-    const txBody = document.querySelector(".history-transactions");
-    const wdBody = document.querySelector(".history-withdrawals");
+    const eventsBody = document.querySelector(".history-events");
     const cardId = "{{ card.id }}";
-    if (!startInput || !endInput || !txBody || !wdBody) return;
+    if (!startInput || !endInput || !eventsBody) return;
 
-    const initialTotals = totalsRow ? totalsRow.innerHTML : "";
-    const initialTx = txBody.innerHTML;
-    const initialWd = wdBody.innerHTML;
-    let controller = null;
+    const timeModal = document.getElementById("withdraw-time-modal");
+    const timeInput = document.getElementById("withdraw-time-input");
+    const timeSave = timeModal?.querySelector("[data-withdraw-time-action='save']");
+    const timeCancel = timeModal?.querySelector("[data-withdraw-time-action='cancel']");
+    let activeWithdrawId = null;
 
     function escapeHtml(value) {
       return String(value || "")
@@ -115,12 +143,89 @@
         .replace(/'/g, "&#039;");
     }
 
+    function readTzOffset() {
+      const match = document.cookie.match(/(?:^|; )tz_offset=([^;]+)/);
+      if (match) {
+        const parsed = parseInt(match[1], 10);
+        if (!Number.isNaN(parsed)) {
+          return parsed;
+        }
+      }
+      return new Date().getTimezoneOffset();
+    }
+
+    function openTimeModal(id, value, isoValue) {
+      activeWithdrawId = id;
+      if (timeInput) {
+        if (isoValue) {
+          const date = new Date(isoValue);
+          if (!Number.isNaN(date.getTime())) {
+            const offset = readTzOffset();
+            const localMillis = date.getTime() - offset * 60000;
+            const localDate = new Date(localMillis);
+            const dd = String(localDate.getUTCDate()).padStart(2, "0");
+            const mm = String(localDate.getUTCMonth() + 1).padStart(2, "0");
+            const yyyy = localDate.getUTCFullYear();
+            const hh = String(localDate.getUTCHours()).padStart(2, "0");
+            const min = String(localDate.getUTCMinutes()).padStart(2, "0");
+            timeInput.value = `${dd}/${mm}/${yyyy} ${hh}:${min}`;
+          } else {
+            timeInput.value = value || "";
+          }
+        } else {
+          timeInput.value = value || "";
+        }
+      }
+      timeModal?.classList.add("is-open");
+    }
+
+    window.openWithdrawTimeModal = (btn) => {
+      if (!btn) return;
+      const id = btn.getAttribute("data-withdraw-id");
+      const value = btn.getAttribute("data-withdraw-time") || "";
+      const iso = btn.getAttribute("data-withdraw-iso") || "";
+      if (id) openTimeModal(id, value, iso);
+    };
+
+    function formatHistoryTimes() {
+      const offsetMinutes = readTzOffset();
+      document.querySelectorAll("td[data-utc]").forEach(cell => {
+        const raw = cell.getAttribute("data-utc") || "";
+        if (!raw) return;
+        const date = new Date(raw);
+        if (Number.isNaN(date.getTime())) return;
+        const offset = Number.isNaN(offsetMinutes) ? new Date().getTimezoneOffset() : offsetMinutes;
+        const localMillis = date.getTime() - offset * 60000;
+        const localDate = new Date(localMillis);
+        const dd = String(localDate.getUTCDate()).padStart(2, "0");
+        const mm = String(localDate.getUTCMonth() + 1).padStart(2, "0");
+        const yyyy = localDate.getUTCFullYear();
+        const hh = String(localDate.getUTCHours()).padStart(2, "0");
+        const min = String(localDate.getUTCMinutes()).padStart(2, "0");
+        let span = cell.querySelector(".time-text");
+        if (!span) {
+          span = document.createElement("span");
+          span.className = "time-text";
+          cell.appendChild(span);
+        }
+        span.textContent = `${dd}/${mm}/${yyyy} ${hh}:${min}`;
+      });
+    }
+
+    const initialTotals = totalsRow ? totalsRow.innerHTML : "";
+    const initialEvents = eventsBody.innerHTML;
+    let controller = null;
+
     function buildParams() {
       const params = new URLSearchParams();
       const start = startInput.value.trim();
       const end = endInput.value.trim();
+      const typeValue = typeSelect ? typeSelect.value.trim() : "";
+      const queryValue = searchInput ? searchInput.value.trim() : "";
       if (start) params.set("start", start);
       if (end) params.set("end", end);
+      if (typeValue) params.set("type", typeValue);
+      if (queryValue) params.set("q", queryValue);
       return params;
     }
 
@@ -130,64 +235,58 @@
       const withdrawn = totalsRow.querySelector("[data-total='withdrawn']");
       const commission = totalsRow.querySelector("[data-total='commission']");
       const balance = totalsRow.querySelector("[data-total='balance']");
-      if (received) received.textContent = totals.received ? `${totals.received} ₽` : "";
-      if (withdrawn) withdrawn.textContent = totals.withdrawn ? `${totals.withdrawn} ₽` : "";
-      if (commission) commission.textContent = totals.commission ? `${totals.commission} ₽` : "";
-      if (balance) balance.textContent = totals.balance ? `${totals.balance} ₽` : "";
+      if (received) received.textContent = totals.received ? `${totals.received} ${RUB}` : "";
+      if (withdrawn) withdrawn.textContent = totals.withdrawn ? `${totals.withdrawn} ${RUB}` : "";
+      if (commission) commission.textContent = totals.commission ? `${totals.commission} ${RUB}` : "";
+      if (balance) balance.textContent = totals.balance ? `${totals.balance} ${RUB}` : "";
     }
 
-    function renderTransactions(items) {
+    function renderEvents(items) {
       if (!items.length) {
-        txBody.innerHTML = "<tr><td colspan=\"5\">No transactions recorded for this card.</td></tr>";
+        eventsBody.innerHTML = "<tr><td colspan=\"9\">No history recorded for this card.</td></tr>";
         return;
       }
-      txBody.innerHTML = items.map(tx => `
-        <tr>
-          <td>${escapeHtml(tx.time)}</td>
-          <td>${escapeHtml(tx.client)}</td>
-          <td>${escapeHtml(tx.rub)} ₽</td>
-          <td>${escapeHtml(tx.usd)} $</td>
-          <td>${escapeHtml(tx.note || "-")}</td>
-        </tr>
-      `).join("");
-    }
-
-    function renderWithdrawals(items) {
-      if (!items.length) {
-        wdBody.innerHTML = "<tr><td colspan=\"5\">No withdrawals logged for this card.</td></tr>";
-        return;
-      }
-      wdBody.innerHTML = items.map(wd => `
-        <tr>
-          <td>${escapeHtml(wd.date)}</td>
-          <td>${escapeHtml(wd.status)}</td>
-          <td>${escapeHtml(wd.amount)} ₽</td>
-          <td>${escapeHtml(wd.commission)} ₽</td>
-          <td>${escapeHtml(wd.note || "-")}</td>
-        </tr>
-      `).join("");
+      eventsBody.innerHTML = items.map(item => {
+        const isWithdrawal = item.type === "Withdrawal";
+        const editBtn = isWithdrawal && item.withdrawal_id
+          ? `<button type="button" class="note-trigger withdraw-edit" onclick="openWithdrawTimeModal(this);return false;" data-withdraw-id="${escapeHtml(item.withdrawal_id)}" data-withdraw-time="${escapeHtml(item.time)}" data-withdraw-iso="${escapeHtml(item.time_iso || '')}" aria-label="Edit withdrawal time">&#9998;</button>`
+          : "";
+        return `
+          <tr>
+            <td data-utc="${escapeHtml(item.time_iso || '')}"><span class="time-text">${escapeHtml(item.time || "")}</span>${editBtn}</td>
+            <td>${escapeHtml(item.type)}</td>
+            <td>${escapeHtml(item.client || "-")}</td>
+            <td>${item.rub ? `${escapeHtml(item.rub)} ${RUB}` : "-"}</td>
+            <td>${item.usd ? `${escapeHtml(item.usd)} $` : "-"}</td>
+            <td>${item.withdrawn ? `${escapeHtml(item.withdrawn)} ${RUB}` : "-"}</td>
+            <td>${item.commission ? `${escapeHtml(item.commission)} ${RUB}` : "-"}</td>
+            <td>${escapeHtml(item.balance)} ${RUB}</td>
+            <td>${escapeHtml(item.note || "-")}</td>
+          </tr>
+        `;
+      }).join("");
     }
 
     function restoreInitial() {
       if (totalsRow) totalsRow.innerHTML = initialTotals;
-      txBody.innerHTML = initialTx;
-      wdBody.innerHTML = initialWd;
+      eventsBody.innerHTML = initialEvents;
+      formatHistoryTimes();
     }
 
-    function applyFilters() {
+    function applyFilters(force = false) {
       const params = buildParams();
-      if (!params.toString()) {
+      if (!params.toString() && !force) {
         restoreInitial();
         return;
       }
       if (controller) controller.abort();
       controller = new AbortController();
       fetch(`/cards/${cardId}/history/search/?${params.toString()}`, { signal: controller.signal })
-        .then(resp => resp.ok ? resp.json() : { totals: null, transactions: [], withdrawals: [] })
+        .then(resp => resp.ok ? resp.json() : { totals: null, events: [] })
         .then(data => {
           renderTotals(data.totals || null);
-          renderTransactions(data.transactions || []);
-          renderWithdrawals(data.withdrawals || []);
+          renderEvents(data.events || []);
+          formatHistoryTimes();
         })
         .catch(() => {});
     }
@@ -203,12 +302,59 @@
 
     bindDateInput(startInput);
     bindDateInput(endInput);
+    if (typeSelect) {
+      typeSelect.addEventListener("change", () => applyFilters(true));
+    }
+    if (searchInput) {
+      searchInput.addEventListener("keydown", (event) => {
+        if (event.key === "Enter") event.preventDefault();
+      });
+      searchInput.addEventListener("input", () => {
+        window.clearTimeout(searchInput._timer);
+        searchInput._timer = window.setTimeout(() => applyFilters(true), 200);
+      });
+    }
     document.addEventListener("click", (event) => {
       const target = event.target;
       if (target && target.matches("button[data-action='clear']")) {
         setTimeout(applyFilters, 0);
       }
     });
+
+    timeCancel?.addEventListener("click", () => {
+      activeWithdrawId = null;
+      timeModal?.classList.remove("is-open");
+    });
+    timeModal?.addEventListener("click", (e) => {
+      if (e.target === timeModal) {
+        activeWithdrawId = null;
+        timeModal?.classList.remove("is-open");
+      }
+    });
+
+    timeSave?.addEventListener("click", () => {
+      if (!activeWithdrawId || !timeInput) return;
+      const ts = timeInput.value.trim();
+      if (!ts) return;
+      const offset = readTzOffset();
+      const formData = new FormData();
+      formData.append("timestamp", ts);
+      formData.append("tz_offset", offset);
+      const csrf = (document.cookie.match(/csrftoken=([^;]+)/) || [])[1] || "";
+      fetch(`/withdraw/${activeWithdrawId}/timestamp/`, {
+        method: "POST",
+        headers: { "X-CSRFToken": csrf },
+        body: formData
+      }).then(resp => {
+        if (resp.ok) {
+          activeWithdrawId = null;
+          timeModal?.classList.remove("is-open");
+          applyFilters(true);
+        }
+      });
+    });
+
+    formatHistoryTimes();
     applyFilters();
   })();
 </script>

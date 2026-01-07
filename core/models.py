@@ -67,11 +67,19 @@ class Transaction(models.Model):
     def __str__(self):
         return f"{self.timestamp.date()} | {self.card.name} | {self.client.name}"
 
+    class Meta:
+        indexes = [
+            models.Index(fields=["-timestamp"]),
+            models.Index(fields=["card", "-timestamp"]),
+            models.Index(fields=["client", "-timestamp"]),
+        ]
+
 
 class Withdrawal(models.Model):
     """
     One row per (date, card) for what the ATM guy did.
     """
+    timestamp = models.DateTimeField(null=True, blank=True)
     date = models.DateField()
     card = models.ForeignKey(Card, on_delete=models.PROTECT, related_name="withdrawals")
     fully_withdrawn = models.BooleanField(default=False)
@@ -81,6 +89,10 @@ class Withdrawal(models.Model):
 
     class Meta:
         unique_together = [("date", "card")]
+        indexes = [
+            models.Index(fields=["date"]),
+            models.Index(fields=["card", "date"]),
+        ]
 
     def __str__(self):
         return f"{self.date} | {self.card.name}"

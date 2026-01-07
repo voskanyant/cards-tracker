@@ -1,4 +1,4 @@
-from datetime import date, timedelta, datetime, time
+from datetime import date, timedelta, datetime, time, timezone as dt_timezone
 from decimal import Decimal, ROUND_DOWN, InvalidOperation
 from collections import defaultdict
 import csv
@@ -20,6 +20,7 @@ from .models import Card, CardGroup, Client, Transaction, Withdrawal
 
 DATE_DISPLAY_FORMAT = "%d/%m/%Y"
 DATE_PARSE_FORMATS = ["%d/%m/%Y", "%Y-%m-%d"]
+DATETIME_PARSE_FORMATS = ["%d/%m/%Y %H:%M", "%Y-%m-%dT%H:%M", "%Y-%m-%d %H:%M"]
 PER_PAGE_CHOICES = [10, 25, 50, 100]
 
 
@@ -47,6 +48,15 @@ def _pagination_items(page_obj, window=2):
     if total > 1:
         items.append(total)
     return items
+
+
+def _pagination_meta(paginator, page_obj):
+    return {
+        "total": paginator.count,
+        "pages": paginator.num_pages,
+        "page": page_obj.number,
+        "per_page": paginator.per_page,
+    }
 
 
 def _format_spaced_number(value):
@@ -178,6 +188,32 @@ def _parse_user_date(raw: str):
 def _format_user_date(day: date) -> str:
     return day.strftime(DATE_DISPLAY_FORMAT)
 
+
+def _parse_user_datetime(raw: str):
+    raw = (raw or "").strip()
+    if not raw:
+        return None
+    for fmt in DATETIME_PARSE_FORMATS:
+        try:
+            return datetime.strptime(raw, fmt)
+        except ValueError:
+            continue
+    return None
+
+
+def _apply_tz_offset(dt_value, offset):
+    if not dt_value:
+        return None
+    try:
+        offset = int(offset)
+    except (TypeError, ValueError):
+        return None
+    if timezone.is_aware(dt_value):
+        dt_value = timezone.make_naive(dt_value, timezone.get_current_timezone())
+    user_tz = timezone.get_fixed_timezone(-offset)
+    aware = timezone.make_aware(dt_value, user_tz)
+    return aware.astimezone(dt_timezone.utc)
+
 def _withdraw_totals(rows):
     totals = {
         "should": Decimal("0"),
@@ -194,7 +230,52 @@ def _withdraw_totals(rows):
 
 
 def _cards_with_totals(cards, start_date=None, end_date=None):
-    cards_list, overall = _cards_with_totals(cards, start_date, end_date)
+    tx_filter = {}
+    wd_filter = {}
+    if start_date:
+        tx_filter["timestamp__date__gte"] = start_date
+        wd_filter["date__gte"] = start_date
+    if end_date:
+        tx_filter["timestamp__date__lte"] = end_date
+        wd_filter["date__lte"] = end_date
+
+    received_map = {
+        row["card_id"]: row["total"] or Decimal("0")
+        for row in Transaction.objects.filter(**tx_filter)
+        .values("card_id")
+        .annotate(total=Sum("amount_rub"))
+    }
+
+    withdraw_map = defaultdict(lambda: {"amount": Decimal("0"), "commission": Decimal("0")})
+    cache = {}
+    withdrawals = _dedupe_withdrawals_by_date(
+        Withdrawal.objects.filter(**wd_filter).select_related("card")
+    )
+    for wd in withdrawals:
+        actual = _withdrawal_actual_amount(wd, cache)
+        withdraw_map[wd.card_id]["amount"] += actual
+        withdraw_map[wd.card_id]["commission"] += wd.commission_rub or Decimal("0")
+
+    overall = {
+        "received": Decimal("0"),
+        "withdrawn": Decimal("0"),
+        "commission": Decimal("0"),
+        "balance": Decimal("0"),
+    }
+
+    cards_list = list(cards)
+    for card in cards_list:
+        received = received_map.get(card.id, Decimal("0"))
+        withdrawn = withdraw_map[card.id]["amount"]
+        commission = withdraw_map[card.id]["commission"]
+        card.received_total = received
+        card.withdrawn_total = withdrawn
+        card.commission_total = commission
+        card.balance_total = received - withdrawn - commission
+        overall["received"] += received
+        overall["withdrawn"] += withdrawn
+        overall["commission"] += commission
+        overall["balance"] += card.balance_total
 
     return cards_list, overall
 
@@ -208,7 +289,11 @@ def _withdraw_rows_for_day(day):
         should = carry_in + received
 
         if should > 0:
-            wd = Withdrawal.objects.filter(date=day, card=card).first()
+            wd = (
+                Withdrawal.objects.filter(date=day, card=card)
+                .order_by("-timestamp", "-id")
+                .first()
+            )
 
             last4 = card.card_number[-4:] if card.card_number and len(card.card_number) >= 4 else ""
             card_label = f"{card.name} *{last4}" if last4 else card.name
@@ -277,6 +362,123 @@ def _payments_rows(start_date=None, end_date=None, query=None):
         })
     rows.sort(key=lambda r: (r["date"], r["client"].name), reverse=True)
     return rows
+
+
+def _dedupe_withdrawals_by_date(withdrawals):
+    seen = set()
+    kept = []
+    for wd in withdrawals.order_by("-date", "-timestamp", "-id"):
+        key = (wd.card_id, wd.date)
+        if key in seen:
+            continue
+        seen.add(key)
+        kept.append(wd)
+    kept.reverse()
+    return kept
+
+
+def _card_balance_before(card: Card, start_date: date | None) -> Decimal:
+    if not start_date:
+        return Decimal("0")
+    received = (
+        Transaction.objects.filter(card=card, timestamp__date__lt=start_date)
+        .aggregate(total=Sum("amount_rub"))["total"]
+        or Decimal("0")
+    )
+    withdrawn = Decimal("0")
+    commission = Decimal("0")
+    cache = {}
+    withdrawals = _dedupe_withdrawals_by_date(
+        Withdrawal.objects.filter(card=card, date__lt=start_date).select_related("card")
+    )
+    for wd in withdrawals:
+        withdrawn += _withdrawal_actual_amount(wd, cache)
+        commission += wd.commission_rub or Decimal("0")
+    return received - withdrawn - commission
+
+
+def _card_events(card: Card, start_date: date | None, end_date: date | None, kind_filter: str | None = None, query: str | None = None):
+    tx_filter = {"card": card}
+    wd_filter = {"card": card}
+    if start_date:
+        tx_filter["timestamp__date__gte"] = start_date
+        wd_filter["date__gte"] = start_date
+    if end_date:
+        tx_filter["timestamp__date__lte"] = end_date
+        wd_filter["date__lte"] = end_date
+
+    events = []
+    for tx in Transaction.objects.filter(**tx_filter).select_related("client").order_by("timestamp"):
+        events.append(
+            {
+                "kind": "transaction",
+                "time": tx.timestamp,
+                "time_iso": tx.timestamp.isoformat(),
+                "time_display": tx.timestamp.strftime("%d/%m/%Y %H:%M"),
+                "client": tx.client.name,
+                "rub": tx.amount_rub or Decimal("0"),
+                "usd": tx.amount_usd or Decimal("0"),
+                "withdrawn": None,
+                "commission": None,
+                "note": tx.notes or "",
+            }
+        )
+
+    cache = {}
+    withdrawals = _dedupe_withdrawals_by_date(
+        Withdrawal.objects.filter(**wd_filter).select_related("card")
+    )
+    for wd in withdrawals:
+        actual = _withdrawal_actual_amount(wd, cache)
+        commission = wd.commission_rub or Decimal("0")
+        if actual <= 0 and commission <= 0:
+            continue
+        event_time = wd.timestamp
+        if not event_time:
+            event_time = timezone.make_aware(datetime.combine(wd.date, time(23, 59, 59)))
+        events.append(
+            {
+                "kind": "withdrawal",
+                "time": event_time,
+                "time_iso": event_time.isoformat() if event_time else "",
+                "time_display": event_time.strftime("%d/%m/%Y %H:%M") if event_time else wd.date.strftime("%d/%m/%Y"),
+                "client": "",
+                "rub": None,
+                "usd": None,
+                "withdrawn": actual,
+                "commission": commission,
+                "note": wd.note or "",
+                "withdrawal_id": wd.id,
+            }
+        )
+
+    if kind_filter in ("transaction", "withdrawal"):
+        events = [event for event in events if event["kind"] == kind_filter]
+
+    if query:
+        q = query.lower()
+        filtered = []
+        for event in events:
+            haystack = []
+            if event["kind"] == "transaction":
+                haystack.append(event.get("client", ""))
+                haystack.append(event.get("note", ""))
+            else:
+                haystack.append(event.get("note", ""))
+            if any(q in (value or "").lower() for value in haystack):
+                filtered.append(event)
+        events = filtered
+
+    events.sort(key=lambda e: e["time"])
+    running = _card_balance_before(card, start_date)
+    for event in events:
+        if event["kind"] == "transaction":
+            running += event["rub"] or Decimal("0")
+        else:
+            running -= (event["withdrawn"] or Decimal("0")) + (event["commission"] or Decimal("0"))
+        event["balance"] = running
+    events.reverse()
+    return events
 
 
 @login_required
@@ -398,7 +600,18 @@ def withdraw_today_save(request):
     if not day:
         return JsonResponse({"ok": False, "error": "Bad date format"}, status=400)
 
-    wd, _ = Withdrawal.objects.get_or_create(date=day, card_id=int(card_id))
+    existing = Withdrawal.objects.filter(date=day, card_id=int(card_id)).order_by("-timestamp", "-id")
+    wd = existing.first()
+    if not wd:
+        wd = Withdrawal(date=day, card_id=int(card_id))
+
+    raw_ts = request.POST.get("timestamp")
+    offset = request.POST.get("tz_offset") or request.COOKIES.get("tz_offset")
+    parsed_ts = _parse_user_datetime(raw_ts)
+    applied_ts = _apply_tz_offset(parsed_ts, offset) if parsed_ts else None
+    if applied_ts:
+        wd.timestamp = applied_ts
+        wd.date = parsed_ts.date()
 
     def parse_decimal(value, field):
         if value in (None, ""):
@@ -432,6 +645,22 @@ def withdraw_today_save(request):
     wd.save()
 
     return JsonResponse({"ok": True, "id": wd.id})
+
+
+@login_required
+@require_POST
+def withdraw_update_time(request, pk: int):
+    wd = get_object_or_404(Withdrawal, pk=pk)
+    raw_ts = request.POST.get("timestamp")
+    offset = request.POST.get("tz_offset") or request.COOKIES.get("tz_offset")
+    parsed_ts = _parse_user_datetime(raw_ts)
+    applied_ts = _apply_tz_offset(parsed_ts, offset) if parsed_ts else None
+    if not parsed_ts or not applied_ts:
+        return JsonResponse({"ok": False, "error": "Invalid timestamp"}, status=400)
+    wd.timestamp = applied_ts
+    wd.date = parsed_ts.date()
+    wd.save()
+    return JsonResponse({"ok": True})
 
 
 @login_required
@@ -483,33 +712,7 @@ def cards_list(request):
         .annotate(total=Sum("amount_rub"))
     }
 
-    withdraw_map = defaultdict(lambda: {"amount": Decimal("0"), "commission": Decimal("0")})
-    cache = {}
-    for wd in Withdrawal.objects.filter(**wd_filter).select_related("card"):
-        actual = _withdrawal_actual_amount(wd, cache)
-        withdraw_map[wd.card_id]["amount"] += actual
-        withdraw_map[wd.card_id]["commission"] += wd.commission_rub or Decimal("0")
-
-    overall = {
-        "received": Decimal("0"),
-        "withdrawn": Decimal("0"),
-        "commission": Decimal("0"),
-        "balance": Decimal("0"),
-    }
-
-    cards_list = list(cards)
-    for card in cards_list:
-        received = received_map.get(card.id, Decimal("0"))
-        withdrawn = withdraw_map[card.id]["amount"]
-        commission = withdraw_map[card.id]["commission"]
-        card.received_total = received
-        card.withdrawn_total = withdrawn
-        card.commission_total = commission
-        card.balance_total = received - withdrawn - commission
-        overall["received"] += received
-        overall["withdrawn"] += withdrawn
-        overall["commission"] += commission
-        overall["balance"] += card.balance_total
+    cards_list, overall = _cards_with_totals(cards, start_date, end_date)
 
     paginator = Paginator(cards_list, per_page)
     page_number = request.GET.get("page")
@@ -695,10 +898,20 @@ def clients_export(request):
 def clients_search(request):
     query = (request.GET.get("q") or "").strip()
     if not query:
-        return JsonResponse({"results": []})
+        return JsonResponse({"results": [], "total": 0, "pages": 0, "page": 1, "per_page": 0})
     clients = Client.objects.filter(name__icontains=query).order_by("name")
+    page = request.GET.get("page")
+    per_page = request.GET.get("per_page")
+    if page or per_page:
+        per_page_value = _parse_per_page(per_page, default=50)
+        paginator = Paginator(clients, per_page_value)
+        page_obj = paginator.get_page(page)
+        data = [{"id": c.id, "name": c.name, "status": c.status} for c in page_obj]
+        payload = {"results": data}
+        payload.update(_pagination_meta(paginator, page_obj))
+        return JsonResponse(payload)
     data = [{"id": c.id, "name": c.name, "status": c.status} for c in clients]
-    return JsonResponse({"results": data})
+    return JsonResponse({"results": data, "total": clients.count(), "pages": 1, "page": 1, "per_page": clients.count()})
 
 
 @login_required
@@ -842,6 +1055,17 @@ def transactions_search(request):
             | Q(notes__icontains=query)
         )
 
+    page = request.GET.get("page")
+    per_page = request.GET.get("per_page")
+    if page or per_page:
+        per_page_value = _parse_per_page(per_page, default=50)
+        paginator = Paginator(txs, per_page_value)
+        page_obj = paginator.get_page(page)
+        txs = page_obj
+    else:
+        paginator = None
+        page_obj = None
+
     data = []
     for tx in txs:
         data.append(
@@ -855,7 +1079,12 @@ def transactions_search(request):
                 "rate": _format_spaced_number(tx.rate),
             }
         )
-    return JsonResponse({"results": data})
+    payload = {"results": data}
+    if paginator and page_obj:
+        payload.update(_pagination_meta(paginator, page_obj))
+    else:
+        payload.update({"total": txs.count(), "pages": 1, "page": 1, "per_page": txs.count()})
+    return JsonResponse(payload)
 
 @login_required
 def card_add(request):
@@ -1012,6 +1241,8 @@ def card_history(request, pk: int):
 
     start_raw = (request.GET.get("start") or "").strip()
     end_raw = (request.GET.get("end") or "").strip()
+    type_filter = (request.GET.get("type") or "").strip().lower()
+    query = (request.GET.get("q") or "").strip()
     start_date = _parse_user_date(start_raw)
     end_date = _parse_user_date(end_raw)
     if start_date:
@@ -1034,42 +1265,28 @@ def card_history(request, pk: int):
     )
 
     cache = {}
-    withdrawals = []
     total_withdrawn = Decimal("0")
     total_commission = Decimal("0")
-    for wd in (
-        Withdrawal.objects.filter(**wd_filter)
-        .select_related("card")
-        .order_by("-date")
-    ):
-        actual = _withdrawal_actual_amount(wd, cache)
-        if actual <= 0:
-            continue
-        commission = wd.commission_rub or Decimal("0")
-        withdrawals.append(
-            {
-                "date": wd.date,
-                "fully": wd.fully_withdrawn,
-                "amount": actual,
-                "commission": commission,
-                "note": wd.note,
-            }
-        )
-        total_withdrawn += actual
-        total_commission += commission
+    withdrawals = _dedupe_withdrawals_by_date(
+        Withdrawal.objects.filter(**wd_filter).select_related("card")
+    )
+    for wd in withdrawals:
+        total_withdrawn += _withdrawal_actual_amount(wd, cache)
+        total_commission += wd.commission_rub or Decimal("0")
 
-    txs = Transaction.objects.filter(**tx_filter).select_related("client").order_by("-timestamp")[:100]
+    events = _card_events(card, start_date, end_date, type_filter, query)
 
     context = {
         "card": card,
-        "transactions": txs,
-        "withdrawals": withdrawals,
+        "events": events,
         "received_total": received,
         "withdrawn_total": total_withdrawn,
         "commission_total": total_commission,
         "balance_total": received - total_withdrawn - total_commission,
         "start": start_raw,
         "end": end_raw,
+        "type_filter": type_filter,
+        "query": query,
     }
     return render(request, "core/card_history.html", context)
 
@@ -1078,6 +1295,8 @@ def card_history_search(request, pk: int):
     card = get_object_or_404(Card, pk=pk)
     start_raw = (request.GET.get("start") or "").strip()
     end_raw = (request.GET.get("end") or "").strip()
+    type_filter = (request.GET.get("type") or "").strip().lower()
+    query = (request.GET.get("q") or "").strip()
     start_date = _parse_user_date(start_raw)
     end_date = _parse_user_date(end_raw)
 
@@ -1096,40 +1315,35 @@ def card_history_search(request, pk: int):
     )
 
     cache = {}
-    withdrawals = []
     total_withdrawn = Decimal("0")
     total_commission = Decimal("0")
-    for wd in (
-        Withdrawal.objects.filter(**wd_filter)
-        .select_related("card")
-        .order_by("-date")
-    ):
-        actual = _withdrawal_actual_amount(wd, cache)
-        if actual <= 0:
-            continue
-        commission = wd.commission_rub or Decimal("0")
-        withdrawals.append(
-            {
-                "date": wd.date.strftime("%d/%m/%Y"),
-                "status": "Full" if wd.fully_withdrawn else "Partial",
-                "amount": _format_spaced_number(actual),
-                "commission": _format_spaced_number(commission),
-                "note": wd.note or "",
-            }
-        )
-        total_withdrawn += actual
-        total_commission += commission
+    withdrawals = _dedupe_withdrawals_by_date(
+        Withdrawal.objects.filter(**wd_filter).select_related("card")
+    )
+    for wd in withdrawals:
+        total_withdrawn += _withdrawal_actual_amount(wd, cache)
+        total_commission += wd.commission_rub or Decimal("0")
 
-    txs = Transaction.objects.filter(**tx_filter).select_related("client").order_by("-timestamp")[:100]
-    transactions = []
-    for tx in txs:
-        transactions.append(
+    events = _card_events(card, start_date, end_date, type_filter, query)
+    data_events = []
+    for event in events:
+        data_events.append(
             {
-                "time": tx.timestamp.strftime("%d/%m/%Y, %H:%M"),
-                "client": tx.client.name,
-                "rub": _format_spaced_number(tx.amount_rub),
-                "usd": _format_spaced_number(tx.amount_usd),
-                "note": tx.notes or "",
+                "time": event["time_display"],
+                "time_iso": event.get("time_iso") or "",
+                "type": "Transaction" if event["kind"] == "transaction" else "Withdrawal",
+                "client": event["client"],
+                "rub": _format_spaced_number(event["rub"]) if event["rub"] is not None else "",
+                "usd": _format_spaced_number(event["usd"]) if event["usd"] is not None else "",
+                "withdrawn": _format_spaced_number(event["withdrawn"])
+                if event["withdrawn"] is not None
+                else "",
+                "commission": _format_spaced_number(event["commission"])
+                if event["commission"] is not None
+                else "",
+                "balance": _format_spaced_number(event["balance"]),
+                "note": event["note"] or "",
+                "withdrawal_id": event.get("withdrawal_id"),
             }
         )
 
@@ -1139,7 +1353,7 @@ def card_history_search(request, pk: int):
         "commission": _format_spaced_number(total_commission),
         "balance": _format_spaced_number(received - total_withdrawn - total_commission),
     }
-    return JsonResponse({"totals": totals, "transactions": transactions, "withdrawals": withdrawals})
+    return JsonResponse({"totals": totals, "events": data_events})
 @login_required
 def payments_summary(request):
     clear_filters = "clear" in request.GET

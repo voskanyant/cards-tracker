@@ -39,4 +39,5 @@ urlpatterns = [
     path("withdraw/", views.withdraw_today, name="withdraw_today"),
     path("withdraw/search/", views.withdraw_search, name="withdraw_search"),
     path("withdraw/save/", views.withdraw_today_save, name="withdraw_today_save"),
+    path("withdraw/<int:pk>/timestamp/", views.withdraw_update_time, name="withdraw_update_time"),
 ]

@@ -85,7 +85,8 @@
 				<div class="currency-input">
 				  <span class="currency-prefix">₽</span>
 				  <input type="text" inputmode="decimal" class="commission" 
-					  value="{% if r.withdrawal %}{{ r.withdrawal.commission_rub|default:'' }}{% endif %}">
+					  value="{% if r.withdrawal %}{{ r.withdrawal.commission_rub|default:'' }}{% endif %}"
+					  {% if r.withdrawal and r.withdrawal.fully_withdrawn %}disabled{% endif %}>
 				</div>
 			  </td>
 
@@ -93,15 +94,12 @@
 
 			  <td class="col-note">
 				<div class="note-cell {% if r.withdrawal and r.withdrawal.note %}has-note{% endif %}">
-				  <div class="note-preview">
+				  <button type="button" class="note-trigger" aria-label="{% if r.withdrawal and r.withdrawal.note %}Edit note{% else %}Add note{% endif %}">
 					{% if r.withdrawal and r.withdrawal.note %}
-					  {{ r.withdrawal.note }}
+					  <span class="note-icon" title="{{ r.withdrawal.note|escape }}">i</span>
 					{% else %}
-					  No note
+					  <span class="note-icon">+</span>
 					{% endif %}
-				  </div>
-				  <button type="button" class="note-trigger">
-					{% if r.withdrawal and r.withdrawal.note %}Edit note{% else %}Add note{% endif %}
 				  </button>
 				  <input type="hidden" class="note note-input" value="{% if r.withdrawal %}{{ r.withdrawal.note|default:'' }}{% endif %}">
 				</div>
@@ -238,8 +236,11 @@
 		if (withdrawnEl) {
 		  withdrawnEl.disabled = full;
 		}
+		if (commissionEl) {
+		  commissionEl.disabled = full;
+		}
 		const withdrawn = full ? should : parseNumber(withdrawnEl?.value);
-		const commission = parseNumber(commissionEl?.value);
+		const commission = full ? 0 : parseNumber(commissionEl?.value);
 		let remaining = should - withdrawn - commission;
 		if (remaining < 0) remaining = 0;
 
@@ -275,9 +276,34 @@
 		});
 	  }
 
+	  function applyFullState(row, confirmChange = false) {
+		const fullEl = row.querySelector(".full");
+		const withdrawnEl = row.querySelector(".withdrawn");
+		const commissionEl = row.querySelector(".commission");
+		const full = fullEl?.checked ?? false;
+		if (full && confirmChange && withdrawnEl && withdrawnEl.value.trim()) {
+		  const ok = window.confirm("Full will ignore the Taken amount. Continue?");
+		  if (!ok) {
+			return false;
+		  }
+		}
+		if (withdrawnEl) {
+		  withdrawnEl.disabled = full;
+		}
+		if (commissionEl) {
+		  commissionEl.disabled = full;
+		}
+		return true;
+	  }
+
 	  async function autosave(row) {
 		const cardId = row.dataset.cardId;
 		const workdate = document.getElementById("workdate").value;
+		const now = new Date();
+		const hh = String(now.getHours()).padStart(2, "0");
+		const mm = String(now.getMinutes()).padStart(2, "0");
+		const timestamp = workdate && hh && mm ? `${workdate} ${hh}:${mm}` : "";
+		const tzOffset = now.getTimezoneOffset();
 
 		const fullEl = row.querySelector(".full");
 		const withdrawnEl = row.querySelector(".withdrawn");
@@ -291,10 +317,12 @@
 
 		const formData = new FormData();
 		formData.append("date", workdate);
+		formData.append("timestamp", timestamp);
+		formData.append("tz_offset", tzOffset);
 		formData.append("card_id", cardId);
 		formData.append("fully_withdrawn", full ? "true" : "false");
 		formData.append("withdrawn_rub", full ? "" : normalizeNumberString(withdrawnEl?.value ?? ""));
-		formData.append("commission_rub", normalizeNumberString(commissionEl?.value ?? ""));
+		formData.append("commission_rub", full ? "" : normalizeNumberString(commissionEl?.value ?? ""));
 		formData.append("note", noteEl?.value ?? "");
 
 
@@ -338,9 +366,25 @@
 		  if (row.dataset.bound) return;
 		  row.dataset.bound = "1";
 		  row.addEventListener("change", (e) => {
+			if (e.target.classList.contains("full")) return;
 			refreshTotals();
 			autosave(row);
 		  });
+
+		  const fullEl = row.querySelector(".full");
+		  if (fullEl) {
+			fullEl.addEventListener("change", () => {
+			  const applied = applyFullState(row, true);
+			  if (!applied) {
+				fullEl.checked = false;
+				applyFullState(row, false);
+				return;
+			  }
+			  refreshTotals();
+			  autosave(row);
+			});
+			applyFullState(row, false);
+		  }
 
 		  row.addEventListener("input", (e) => {
 			if (e.target.classList.contains("withdrawn") || e.target.classList.contains("commission")) {
@@ -385,13 +429,12 @@
 		}
 		const cell = row.querySelector(".note-cell");
 		if (!cell) return;
-		const preview = cell.querySelector(".note-preview");
-		if (preview) {
-		  preview.textContent = value ? value : "No note";
-		}
 		const trigger = cell.querySelector(".note-trigger");
 		if (trigger) {
-		  trigger.textContent = value ? "Edit note" : "Add note";
+		  trigger.innerHTML = value
+			? `<span class="note-icon" title="${escapeHtml(value)}">i</span>`
+			: `<span class="note-icon">+</span>`;
+		  trigger.setAttribute("aria-label", value ? "Edit note" : "Add note");
 		}
 		cell.classList.toggle("has-note", Boolean(value));
 	  }
@@ -513,9 +556,11 @@
 		  const withdrawnVal = item.withdrawn_rub ? formatNumber(parseNumber(item.withdrawn_rub)) : "";
 		  const commissionVal = item.commission_rub ? formatNumber(parseNumber(item.commission_rub)) : "";
 		  const note = item.note || "";
-		  const notePreview = note ? escapeHtml(note) : "No note";
-		  const noteLabel = note ? "Edit note" : "Add note";
 		  const noteClass = note ? "note-cell has-note" : "note-cell";
+		  const noteIcon = note
+			? `<span class="note-icon" title="${escapeHtml(note)}">i</span>`
+			: `<span class="note-icon">+</span>`;
+		  const noteLabel = note ? "Edit note" : "Add note";
 		  return `
 			<tr data-card-id="${escapeHtml(item.card_id)}" data-should="${escapeHtml(shouldRaw)}">
 			  <td class="col-card">${cardLabel}</td>
@@ -528,13 +573,12 @@
 				<input type="text" inputmode="decimal" class="withdrawn" value="${escapeHtml(withdrawnVal)}" ${disabledAttr}>
 			  </td>
 			  <td class="num col-money-input">
-				<input type="text" inputmode="decimal" class="commission" value="${escapeHtml(commissionVal)}">
+				<input type="text" inputmode="decimal" class="commission" value="${escapeHtml(commissionVal)}" ${disabledAttr}>
 			  </td>
 			  <td class="num col-money"><b class="remaining-value">${remaining} ₽</b></td>
 			  <td>
 				<div class="${noteClass}">
-				  <div class="note-preview">${notePreview}</div>
-				  <button type="button" class="note-trigger">${noteLabel}</button>
+				  <button type="button" class="note-trigger" aria-label="${noteLabel}">${noteIcon}</button>
 				  <input type="hidden" class="note note-input" value="${escapeHtml(note)}">
 				</div>
 			  </td>
