@@ -6,13 +6,35 @@
   .withdraw-search-toggle {
     display: none;
     border: 1px solid var(--border);
-    background: #fff;
-    color: var(--text);
+    background: #fff !important;
+    color: var(--text) !important;
     border-radius: 12px;
     padding: 10px 12px;
     cursor: pointer;
     font-weight: 600;
     position: relative;
+    -webkit-tap-highlight-color: transparent;
+    -webkit-appearance: none;
+    appearance: none;
+    box-shadow: none !important;
+  }
+  .withdraw-search-toggle:hover,
+  .withdraw-search-toggle:focus,
+  .withdraw-search-toggle:focus-visible,
+  .withdraw-search-toggle:active,
+  .withdraw-search-toggle.is-open {
+    background: #fff !important;
+    color: var(--text) !important;
+    border-color: var(--border) !important;
+    box-shadow: none !important;
+  }
+  .withdraw-search-toggle:focus {
+    outline: none;
+    border-color: var(--primary);
+    box-shadow: 0 0 0 3px rgba(0, 102, 255, 0.15);
+  }
+  .withdraw-search-toggle.is-open {
+    background: #fff;
   }
   .withdraw-search-toggle .icon-dot {
     width: 14px;
@@ -41,6 +63,57 @@
   }
   .mobile-label {
     display: none;
+  }
+  .withdraw-table .cell-note {
+    min-width: 0;
+    max-width: 140px;
+  }
+  .withdraw-table .currency-input input {
+    text-align: left;
+    padding-right: 6px;
+    padding-left: 22px;
+    font-size: 0.9rem;
+    box-sizing: border-box;
+  }
+  .withdraw-table .col-money-input {
+    width: 200px;
+  }
+  .withdraw-table td.cell-note .note-cell {
+    display: flex !important;
+    flex-direction: row !important;
+    align-items: center !important;
+    gap: 8px;
+    width: 100%;
+    min-width: 0;
+    flex-wrap: nowrap;
+    overflow: hidden;
+    white-space: nowrap;
+  }
+  .withdraw-table td.cell-note .note-trigger {
+    flex: 0 0 auto;
+  }
+  .withdraw-table td.cell-note .note-preview {
+    display: none;
+    padding: 0;
+    text-align: left;
+    font-size: 0.8rem;
+    color: var(--muted);
+    cursor: pointer;
+    flex: 1 1 auto;
+    min-width: 0;
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .withdraw-table td.cell-note .note-preview:focus {
+    outline: none;
+  }
+  .withdraw-table td.cell-note .note-cell.has-note .note-icon {
+    color: var(--primary);
+  }
+  .withdraw-table td.cell-note .note-cell.has-note .note-preview {
+    display: inline-block;
   }
   .withdraw-table tbody tr.withdraw-item.is-full {
     background: #f0fdf4;
@@ -131,6 +204,7 @@
       padding: 12px;
       border-bottom: 1px solid var(--border);
       width: 100%;
+      font-size: 0.95rem;
     }
     .withdraw-table tbody tr.withdraw-item.is-open {
       background: #fbfcfe;
@@ -164,13 +238,13 @@
     }
     .withdraw-table tbody tr.withdraw-item.is-open {
       display: grid;
-      grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+      grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr);
       grid-template-areas:
         "card card"
         "taken fee"
         "left note";
       column-gap: 12px;
-      row-gap: 10px;
+      row-gap: 14px;
     }
     .withdraw-table tbody tr.withdraw-item.is-open td {
       width: auto;
@@ -213,6 +287,7 @@
     .withdraw-table tbody tr.withdraw-item.is-open .col-money-input {
       width: auto !important;
       min-width: 0 !important;
+      padding-right: 6px;
     }
     .withdraw-table tbody tr.withdraw-item.is-open .currency-input,
     .withdraw-table tbody tr.withdraw-item.is-open .currency-input input {
@@ -220,6 +295,15 @@
       min-width: 0 !important;
       max-width: 100% !important;
       box-sizing: border-box;
+    }
+    .withdraw-table tbody tr.withdraw-item.is-open .currency-input input {
+      padding-right: 4px;
+      padding-left: 22px;
+      font-size: clamp(0.78rem, 3.2vw, 0.9rem);
+    }
+    .withdraw-table tbody tr.withdraw-item.is-open .currency-prefix {
+      left: 8px;
+      font-size: 0.85rem;
     }
     .withdraw-table .mobile-main {
       display: flex;
@@ -502,6 +586,7 @@
 					  <span class="note-icon">+</span>
 					{% endif %}
 				  </button>
+				  <span class="note-preview" role="button" aria-label="View note">{{ r.withdrawal.note|default:"" }}</span>
 				  <input type="hidden" class="note note-input" value="{% if r.withdrawal %}{{ r.withdrawal.note|default:'' }}{% endif %}">
 				</div>
 			  </td>
@@ -618,6 +703,23 @@
 		fracPart = fracPart.replace(/0+$/, "");
 		const formattedInt = `${sign}${intPart || "0"}`;
 		return fracPart ? `${formattedInt}.${fracPart}` : formattedInt;
+	  }
+
+	  function formatInputValue(raw) {
+		if (raw === undefined || raw === null) return "";
+		const text = String(raw).replace(/\s+/g, "");
+		if (!text) return "";
+		const sign = text.startsWith("-") ? "-" : "";
+		const unsigned = sign ? text.slice(1) : text;
+		const parts = unsigned.split(/[.,]/);
+		const intPart = parts[0].replace(/\D/g, "");
+		if (!intPart) return sign ? "-" : "";
+		const grouped = intPart.replace(/\B(?=(\d{3})+(?!\d))/g, " ");
+		if (parts.length > 1) {
+		  const frac = parts[1].replace(/\D/g, "");
+		  return frac ? `${sign}${grouped}.${frac}` : `${sign}${grouped}`;
+		}
+		return `${sign}${grouped}`;
 	  }
 
 	  function escapeHtml(value) {
@@ -775,7 +877,7 @@
 		document.querySelectorAll(".withdrawn, .commission").forEach(input => {
 		  const raw = input.value;
 		  if (!raw) return;
-		  input.value = formatNumber(parseNumber(raw));
+		  input.value = formatInputValue(raw);
 		});
 	  }
 
@@ -826,6 +928,7 @@
 
 		  row.addEventListener("input", (e) => {
 			if (e.target.classList.contains("withdrawn") || e.target.classList.contains("commission")) {
+			  e.target.value = formatInputValue(e.target.value);
 			  refreshTotals();
 			}
 		  });
@@ -833,7 +936,7 @@
 		  row.querySelectorAll(".withdrawn, .commission").forEach(input => {
 			input.addEventListener("blur", () => {
 			  if (!input.value) return;
-			  input.value = formatNumber(parseNumber(input.value));
+			  input.value = formatInputValue(input.value);
 			});
 		  });
 		});
@@ -868,11 +971,15 @@
 		const cell = row.querySelector(".note-cell");
 		if (!cell) return;
 		const trigger = cell.querySelector(".note-trigger");
+		const preview = cell.querySelector(".note-preview");
 		if (trigger) {
 		  trigger.innerHTML = value
 			? `<span class="note-icon" title="${escapeHtml(value)}">i</span>`
 			: `<span class="note-icon">+</span>`;
 		  trigger.setAttribute("aria-label", value ? "Edit note" : "Add note");
+		}
+		if (preview) {
+		  preview.textContent = value;
 		}
 		cell.classList.toggle("has-note", Boolean(value));
 	  }
@@ -886,6 +993,13 @@
 		  const hidden = row.querySelector(".note");
 		  updateNoteDisplay(row, hidden?.value || "");
 		  btn.addEventListener("click", () => openNoteModal(row));
+		});
+		document.querySelectorAll(".note-preview").forEach(preview => {
+		  if (preview.dataset.bound) return;
+		  preview.dataset.bound = "1";
+		  const row = preview.closest("tr[data-card-id]");
+		  if (!row) return;
+		  preview.addEventListener("click", () => openNoteModal(row));
 		});
 	  }
 
@@ -944,17 +1058,21 @@
 		label: opt.value
 	  }));
 
-	  if (searchToggle && searchWrap) {
-		if (searchInput && searchInput.value.trim()) {
-		  searchWrap.classList.add("is-open");
-		}
-		searchToggle.addEventListener("click", () => {
-		  searchWrap.classList.toggle("is-open");
-		  if (searchWrap.classList.contains("is-open")) {
-			searchInput?.focus();
-		  }
-		});
+	if (searchToggle && searchWrap) {
+	  if (searchInput && searchInput.value.trim()) {
+		searchWrap.classList.add("is-open");
+		searchToggle.classList.add("is-open");
 	  }
+	  searchToggle.addEventListener("click", () => {
+		searchWrap.classList.toggle("is-open");
+		searchToggle.classList.toggle("is-open");
+		if (searchWrap.classList.contains("is-open")) {
+		  searchInput?.focus();
+		} else {
+		  searchToggle.blur();
+		}
+	  });
+	}
 
 	  function setUrlQuery(term) {
 		const params = new URLSearchParams();
@@ -1054,6 +1172,7 @@
 						<span class="mobile-label">Note</span>
 				<div class="${noteClass}">
 				  <button type="button" class="note-trigger" aria-label="${noteLabel}">${noteIcon}</button>
+				  <span class="note-preview" role="button" aria-label="View note">${escapeHtml(note)}</span>
 				  <input type="hidden" class="note note-input" value="${escapeHtml(note)}">
 				</div>
 			  </td>
