@@ -1,6 +1,119 @@
-{% extends "core/base.html" %}
+﻿{% extends "core/base.html" %}
 {% load formatting %}
 {% block content %}
+<style>
+  @media (max-width: 720px) {
+    .transactions-filters {
+      display: grid !important;
+      grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+      gap: 10px 12px;
+    }
+    .transactions-filters .search-per-page-row {
+      display: grid;
+      grid-template-columns: minmax(0, 4fr) minmax(0, 1fr);
+      gap: 10px 12px;
+      grid-column: 1 / -1;
+      align-items: end;
+    }
+    .transactions-filters .search-per-page-row label {
+      display: flex;
+      flex-direction: column;
+      gap: 0;
+    }
+    .transactions-filters .search-per-page-row input,
+    .transactions-filters .search-per-page-row select {
+      min-height: 44px;
+    }
+    .transactions-filters .search-per-page-row .filter-search {
+      grid-column: 1 / 2;
+    }
+    .transactions-filters .search-per-page-row .transactions-per-page {
+      grid-column: 2 / 3;
+    }
+    .transactions-filters .filter-search {
+      grid-column: 1 / 2;
+    }
+    .transactions-filters .transactions-per-page {
+      grid-column: 2 / 3;
+    }
+    .transactions-filters label {
+      min-width: 0 !important;
+    }
+    .transactions-table {
+      width: 100%;
+      min-width: 0;
+      table-layout: fixed;
+    }
+    .transactions-table thead {
+      display: none;
+    }
+    .transactions-table tbody {
+      display: block;
+      width: 100%;
+    }
+    .transactions-table tr {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      grid-template-areas:
+        "time rate"
+        "client card"
+        "rub usd"
+        "actions actions";
+      gap: 6px 12px;
+      width: 100%;
+      padding: 12px;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      background: #fff;
+      margin-bottom: 12px;
+    }
+    .transactions-table td {
+      display: block;
+      padding: 6px 0;
+      border: none;
+      text-align: left;
+      min-width: 0;
+    }
+    .transactions-table td::before {
+      content: none;
+    }
+    .transactions-table td:nth-child(1),
+    .transactions-table td:nth-child(2) {
+      font-weight: 600;
+    }
+    .transactions-table td:nth-child(5),
+    .transactions-table td:nth-child(6) {
+      font-size: 0.9rem;
+      color: var(--muted);
+    }
+    .transactions-table td:nth-child(7) {
+      grid-column: 1 / -1;
+      padding-top: 8px;
+    }
+    .transactions-table td:nth-child(1) { grid-area: time; }
+    .transactions-table td:nth-child(6) { grid-area: rate; }
+    .transactions-table td:nth-child(2) { grid-area: client; }
+    .transactions-table td:nth-child(5) { grid-area: card; }
+    .transactions-table td:nth-child(3) { grid-area: rub; }
+    .transactions-table td:nth-child(4) { grid-area: usd; }
+    .transactions-table td:nth-child(7) { grid-area: actions; }
+  }
+  .transactions-filters .search-per-page-row {
+    display: flex;
+    gap: 12px;
+    align-items: flex-end;
+    flex: 1 1 360px;
+  }
+  .transactions-filters .search-per-page-row label {
+    min-width: 0;
+  }
+  .transactions-filters .search-per-page-row .filter-search {
+    flex: 1 1 0;
+  }
+  .transactions-filters .search-per-page-row .transactions-per-page {
+    flex: 0 0 140px;
+  }
+</style>
 <div style="display:flex; flex-wrap:wrap; justify-content:space-between; gap:12px; align-items:center;">
   <h2 style="margin:0;">Transactions</h2>
   <a href="/transactions/export/{% if start or end or query %}?{% endif %}{% if start %}start={{ start|urlencode }}{% if end or query %}&{% endif %}{% endif %}{% if end %}end={{ end|urlencode }}{% if query %}&{% endif %}{% endif %}{% if query %}q={{ query|urlencode }}{% endif %}">Export CSV</a>
@@ -68,7 +181,7 @@
         <label style="display:flex; flex-direction:column; min-width:130px; flex:0.45;">
           <span>{{ field.label }}{% if field.field.required %} *{% endif %}</span>
           <div class="currency-input">
-            <span class="currency-prefix">{% if field.name == "amount_rub" %}₽{% else %}${% endif %}</span>
+            <span class="currency-prefix">{% if field.name == "amount_rub" %}&#8381;{% else %}${% endif %}</span>
             {{ field }}
           </div>
           {% if field.errors %}
@@ -102,7 +215,7 @@
   {% endfor %}
 </datalist>
 
-<form method="get" class="filters section-card" style="margin-bottom:16px; display:flex; flex-wrap:wrap; gap:12px; align-items:flex-end;">
+<form method="get" class="filters section-card transactions-filters" style="margin-bottom:16px; display:flex; flex-wrap:wrap; gap:12px; align-items:flex-end;">
   <label style="display:flex; flex-direction:column;">
     <span>From</span>
     <div class="date-field">
@@ -117,35 +230,37 @@
       <button type="button" class="calendar-toggle" aria-label="Open calendar">&#128197;</button>
     </div>
   </label>
-  <label style="display:flex; flex-direction:column; min-width:200px; flex:1;">
-    <span>Search</span>
-    <input type="text" name="q" placeholder="Search client/card/notes..." value="{{ query }}">
-  </label>
-  <label class="transactions-per-page" style="display:flex; flex-direction:column; min-width:140px;">
-    <span>Per page</span>
-    <select name="per_page">
-      {% for option in per_page_choices %}
-        <option value="{{ option }}" {% if option == per_page %}selected{% endif %}>{{ option }}</option>
-      {% endfor %}
-    </select>
-  </label>
+  <div class="search-per-page-row">
+    <label class="filter-search" style="display:flex; flex-direction:column; min-width:200px; flex:1;">
+      <span>Search</span>
+      <input type="text" name="q" placeholder="Search client/card/notes..." value="{{ query }}">
+    </label>
+    <label class="transactions-per-page" style="display:flex; flex-direction:column; min-width:140px;">
+      <span>Per page</span>
+      <select name="per_page">
+        {% for option in per_page_choices %}
+          <option value="{{ option }}" {% if option == per_page %}selected{% endif %}>{{ option }}</option>
+        {% endfor %}
+      </select>
+    </label>
+  </div>
 </form>
 
 <div class="table-card table-scroll mobile-cards">
-<table>
+<table class="transactions-table">
   <thead>
-    <tr><th>Time</th><th>Client</th><th>RUB ₽</th><th>USD $</th><th>Card</th><th>Rate ₽</th><th>Actions</th></tr>
+    <tr><th>Time</th><th>Client</th><th>RUB &#8381;</th><th>USD $</th><th>Card</th><th>Rate &#8381;</th><th>Actions</th></tr>
   </thead>
   <tbody>
     {% for t in page_obj %}
       <tr>
-        <td data-utc="{{ t.timestamp|date:'c' }}"></td>
-        <td>{{ t.client.name }}</td>
-        <td>{{ t.amount_rub|spaced_number }} ₽</td>
-        <td>{{ t.amount_usd|spaced_number }} $</td>
-        <td>{{ t.card.name }}</td>
-        <td>{{ t.rate|spaced_number }} ₽</td>
-        <td>
+        <td data-label="Time" data-utc="{{ t.timestamp|date:'c' }}"></td>
+        <td data-label="Client">{{ t.client.name }}</td>
+        <td data-label="RUB &#8381;">{{ t.amount_rub|spaced_number }} &#8381;</td>
+        <td data-label="USD $">{{ t.amount_usd|spaced_number }} $</td>
+        <td data-label="Card">{{ t.card_display }}</td>
+        <td data-label="Rate &#8381;">{{ t.rate|spaced_number }} &#8381;</td>
+        <td data-label="Actions">
           <a href="/transactions/{{ t.id }}/edit/">Edit</a>
           <form method="post" action="{% url 'transaction_delete' t.id %}" style="display:inline;" onsubmit="return confirm('Delete this transaction?');">
             {% csrf_token %}
@@ -345,13 +460,13 @@
           const timeIso = escapeHtml(tx.time_iso);
           return `
             <tr>
-              <td data-utc="${timeIso}"></td>
-              <td>${client}</td>
-              <td>${rub} ₽</td>
-              <td>${usd} $</td>
-              <td>${card}</td>
-              <td>${rate} ₽</td>
-              <td>
+              <td data-label="Time" data-utc="${timeIso}"></td>
+              <td data-label="Client">${client}</td>
+              <td data-label="RUB &#8381;">${rub} &#8381;</td>
+              <td data-label="USD $">${usd} $</td>
+              <td data-label="Card">${card}</td>
+              <td data-label="Rate &#8381;">${rate} &#8381;</td>
+              <td data-label="Actions">
                 <a href="/transactions/${id}/edit/">Edit</a>
                 <form method="post" action="/transactions/${id}/delete/" style="display:inline;" onsubmit="return confirm('Delete this transaction?');">
                   <input type="hidden" name="csrfmiddlewaretoken" value="${csrf}">
@@ -474,3 +589,4 @@
   })();
 </script>
 {% endblock %}
+

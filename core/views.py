@@ -981,6 +981,8 @@ def transactions_list(request):
     paginator = Paginator(txs, per_page)
     page_number = request.GET.get("page")
     page_obj = paginator.get_page(page_number)
+    for tx in page_obj:
+        tx.card_display = _card_display(tx.card)
 
     context = {
         "page_obj": page_obj,
@@ -1073,7 +1075,7 @@ def transactions_search(request):
                 "id": tx.id,
                 "time_iso": tx.timestamp.isoformat(),
                 "client": tx.client.name,
-                "card": tx.card.name,
+                "card": _card_display(tx.card),
                 "rub": _format_spaced_number(tx.amount_rub),
                 "usd": _format_spaced_number(tx.amount_usd),
                 "rate": _format_spaced_number(tx.rate),
