@@ -2,34 +2,50 @@
 <html>
 <head>
   <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Cards Tracker</title>
   <style>
+    @import url("https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&display=swap");
     :root {
-      --bg: #f5f6fa;
+      --bg: #f7f7f7;
       --surface: #ffffff;
-      --text: #0f172a;
-      --muted: #6b7280;
-      --primary: #0066ff;
-      --primary-dark: #004acc;
-      --border: #e2e8f0;
-      --radius: 14px;
+      --surface-soft: #fafafa;
+      --text: #0b0b0b;
+      --muted: #6c6c6c;
+      --primary: #0b0b0b;
+      --primary-dark: #000000;
+      --border: #e6e6e6;
+      --radius: 8px;
+      --radius-sm: 6px;
+      --shadow: none;
     }
     * { box-sizing: border-box; }
     body {
-      font-family: "Inter", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      font-family: "IBM Plex Sans", "Segoe UI", sans-serif;
       margin: 0;
       background: var(--bg);
       color: var(--text);
       min-height: 100vh;
       line-height: 1.5;
+      font-size: 15px;
     }
     nav {
       background: var(--surface);
       border-bottom: 1px solid var(--border);
-      padding: 12px 16px;
+      padding: 10px 14px;
       position: sticky;
       top: 0;
       z-index: 10;
+    }
+    .menu-toggle {
+      display: none;
+      border: 1px solid var(--border);
+      background: #fff;
+      color: var(--text);
+      border-radius: 10px;
+      padding: 8px 10px;
+      cursor: pointer;
+      font-weight: 600;
     }
     nav .nav-inner {
       display: flex;
@@ -41,24 +57,28 @@
     nav a {
       color: var(--muted);
       text-decoration: none;
-      padding: 6px 12px;
+      padding: 6px 10px;
       border-radius: 999px;
       font-weight: 600;
       transition: color 0.2s, background 0.2s;
     }
     nav a:hover {
       color: var(--primary);
-      background: rgba(0,102,255,0.08);
+      background: #efefef;
+    }
+    nav a.active {
+      color: var(--primary);
+      background: #ececec;
     }
     main {
-      padding: 16px;
+      padding: 14px;
     }
     .page {
-      max-width: 1100px;
+      max-width: 1080px;
       margin: 0 auto;
       display: flex;
       flex-direction: column;
-      gap: 20px;
+      gap: 16px;
     }
     .flash-stack {
       display: flex;
@@ -67,33 +87,22 @@
     }
     .flash {
       border-radius: var(--radius);
-      padding: 12px 16px;
+      padding: 10px 14px;
       font-weight: 600;
       border: 1px solid var(--border);
     }
-    .flash-success {
-      background: #ecfdf5;
-      color: #065f46;
-      border-color: #a7f3d0;
-    }
-    .flash-error {
-      background: #fef2f2;
-      color: #991b1b;
-      border-color: #fecaca;
-    }
-    .flash-warning {
-      background: #fffbeb;
-      color: #92400e;
-      border-color: #fde68a;
-    }
+    .flash-success,
+    .flash-error,
+    .flash-warning,
     .flash-info {
-      background: #eff6ff;
-      color: #1d4ed8;
-      border-color: #bfdbfe;
+      background: #ffffff;
+      color: var(--text);
+      border-color: var(--border);
     }
     h1, h2, h3 {
-      margin: 0 0 10px;
+      margin: 0 0 6px;
       font-weight: 700;
+      letter-spacing: -0.01em;
     }
     p {
       margin: 0 0 12px;
@@ -102,8 +111,8 @@
       background: var(--surface);
       border-radius: var(--radius);
       border: 1px solid var(--border);
-      padding: 16px;
-      box-shadow: 0 10px 30px rgba(15,23,42,0.05);
+      padding: 14px;
+      box-shadow: var(--shadow);
     }
     .form-grid {
       display: grid;
@@ -178,10 +187,10 @@
     }
     .note-trigger {
       border: none;
-      background: rgba(0,0,0,0.05);
+      background: #f0f0f0;
       border-radius: 999px;
-      font-size: 0.8rem;
-      padding: 4px 10px;
+      font-size: 0.75rem;
+      padding: 3px 8px;
       align-self: flex-start;
       cursor: pointer;
       color: var(--primary);
@@ -370,38 +379,38 @@
     }
     input, select, textarea {
       border: 1px solid var(--border);
-      border-radius: 10px;
-      padding: 10px 12px;
-      background: #fff;
+      border-radius: var(--radius-sm);
+      padding: 8px 10px;
+      background: var(--surface-soft);
       transition: border 0.2s, box-shadow 0.2s;
       width: 100%;
     }
     input:focus, select:focus, textarea:focus {
       outline: none;
-      border-color: var(--primary);
-      box-shadow: 0 0 0 3px rgba(0,102,255,0.15);
+      border-color: var(--text);
+      box-shadow: none;
     }
     button {
       border: none;
-      border-radius: 12px;
+      border-radius: var(--radius-sm);
       background: var(--primary);
       color: #fff;
-      padding: 12px 18px;
+      padding: 8px 14px;
       font-weight: 600;
       cursor: pointer;
-      transition: background 0.2s, transform 0.2s;
+      transition: background 0.2s;
     }
     button:hover {
       background: var(--primary-dark);
     }
     button:active {
-      transform: translateY(1px);
+      transform: none;
     }
     .table-card {
       background: var(--surface);
       border-radius: var(--radius);
       border: 1px solid var(--border);
-      box-shadow: 0 10px 30px rgba(15,23,42,0.05);
+      box-shadow: var(--shadow);
       padding: 0;
       overflow: hidden;
     }
@@ -417,16 +426,16 @@
       min-width: 640px;
     }
     th, td {
-      padding: 12px 16px;
+      padding: 8px 10px;
       border-bottom: 1px solid var(--border);
     }
     th {
-      background: #f8fafc;
+      background: var(--surface-soft);
       text-align: left;
-      font-size: 0.85rem;
+      font-size: 0.75rem;
       color: var(--muted);
-      text-transform: uppercase;
-      letter-spacing: 0.05em;
+      text-transform: none;
+      letter-spacing: 0.02em;
       cursor: pointer;
       user-select: none;
       position: sticky;
@@ -490,11 +499,11 @@
     .pill {
       display: inline-flex;
       align-items: center;
-      padding: 4px 10px;
+      padding: 4px 8px;
       border-radius: 999px;
-      background: rgba(0,102,255,0.12);
+      background: #efefef;
       color: var(--primary);
-      font-size: 0.8rem;
+      font-size: 0.75rem;
       font-weight: 600;
     }
     .filters, .add-transaction form {
@@ -568,9 +577,93 @@
     .clients-export {
       white-space: nowrap;
     }
+    .side-drawer {
+      position: fixed;
+      inset: 0 auto 0 0;
+      width: 260px;
+      background: #fff;
+      border-right: 1px solid var(--border);
+      padding: 16px;
+      transform: translateX(-100%);
+      transition: transform 0.2s ease;
+      z-index: 50;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+    .side-drawer.is-open {
+      transform: translateX(0);
+    }
+    .side-drawer .drawer-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 6px;
+      font-weight: 700;
+    }
+    .side-drawer .drawer-links {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .side-drawer .drawer-links a {
+      text-decoration: none;
+      color: var(--text);
+      font-weight: 600;
+      padding: 8px 10px;
+      border-radius: 10px;
+    }
+    .side-drawer .drawer-links a.active {
+      background: rgba(0,102,255,0.12);
+      color: var(--primary);
+    }
+    .drawer-backdrop {
+      position: fixed;
+      inset: 0;
+      background: rgba(15, 23, 42, 0.4);
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.2s ease;
+      z-index: 40;
+    }
+    .drawer-backdrop.is-open {
+      opacity: 1;
+      pointer-events: auto;
+    }
     @media (max-width: 720px) {
       nav .nav-inner {
         flex-direction: column;
+      }
+      nav .nav-inner {
+        display: none;
+      }
+      nav {
+        display: flex;
+        justify-content: flex-start;
+      }
+      .menu-toggle {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+      }
+      .filters,
+      .add-transaction form,
+      .section-card form,
+      .filters-row {
+        flex-direction: column;
+        align-items: stretch;
+      }
+      .filters label,
+      .section-card form label,
+      .filters-row label {
+        width: 100%;
+      }
+      .clients-controls {
+        flex-direction: column;
+        align-items: stretch;
+      }
+      .clients-controls .clients-per-page {
+        flex: 1 1 auto;
       }
       table {
         min-width: 540px;
@@ -620,6 +713,7 @@
 </head>
 <body>
   <nav>
+    <button type="button" class="menu-toggle" aria-label="Open menu">☰ Menu</button>
     <div class="nav-inner">
       <a href="/transactions/">Transactions</a>
       <a href="/withdraw/">Withdraw</a>
@@ -642,6 +736,20 @@
     </div>
   </main>
 
+  <div class="drawer-backdrop" data-drawer-backdrop></div>
+  <aside class="side-drawer" data-drawer>
+    <div class="drawer-header">
+      <span>Menu</span>
+      <button type="button" class="menu-toggle" data-drawer-close>Close</button>
+    </div>
+    <nav class="drawer-links">
+      <a href="/transactions/">Transactions</a>
+      <a href="/withdraw/">Withdraw</a>
+      <a href="/payments/">Payments</a>
+      <a href="/cards/">Cards</a>
+      <a href="/clients/">Clients</a>
+    </nav>
+  </aside>
 
   <script>
     (function () {
@@ -726,6 +834,41 @@
             if (th.getAttribute("data-sortable") === "false") return;
             th.addEventListener("click", () => sortTable(table, idx, th));
           });
+        });
+      }
+
+      function applyTableDataLabels() {
+        document.querySelectorAll("table").forEach(table => {
+          const head = table.tHead;
+          const headerRow = head ? head.rows[0] : table.rows[0];
+          if (!headerRow) return;
+          const labels = Array.from(headerRow.cells).map(th => th.textContent.trim());
+          table.querySelectorAll("tbody tr, tfoot tr").forEach(row => {
+            Array.from(row.cells).forEach((cell, idx) => {
+              const colspan = parseInt(cell.getAttribute("colspan") || "1", 10);
+              if (colspan > 1) {
+                cell.setAttribute("data-label", "");
+                return;
+              }
+              cell.setAttribute("data-label", labels[idx] || "");
+            });
+          });
+        });
+      }
+
+      function observeTableChanges() {
+        let pending = false;
+        const observer = new MutationObserver(() => {
+          if (pending) return;
+          pending = true;
+          requestAnimationFrame(() => {
+            applyTableDataLabels();
+            pending = false;
+          });
+        });
+        document.querySelectorAll("table").forEach(table => {
+          const body = table.tBodies.length ? table.tBodies[0] : table;
+          observer.observe(body, { childList: true, subtree: true });
         });
       }
 
@@ -1135,10 +1278,34 @@
 
       document.addEventListener("DOMContentLoaded", () => {
         makeTablesSortable();
+        applyTableDataLabels();
+        observeTableChanges();
         initNoteToggles();
         initCalendarPickers();
         initComboboxes();
         syncDateTimeInputsToLocal();
+        const path = window.location.pathname || "";
+        document.querySelectorAll("nav a, .drawer-links a").forEach(link => {
+          const href = link.getAttribute("href") || "";
+          if (href && path.startsWith(href)) {
+            link.classList.add("active");
+          }
+        });
+        const drawer = document.querySelector("[data-drawer]");
+        const backdrop = document.querySelector("[data-drawer-backdrop]");
+        const toggleBtn = document.querySelector(".menu-toggle");
+        const closeBtn = document.querySelector("[data-drawer-close]");
+        const openDrawer = () => {
+          drawer?.classList.add("is-open");
+          backdrop?.classList.add("is-open");
+        };
+        const closeDrawer = () => {
+          drawer?.classList.remove("is-open");
+          backdrop?.classList.remove("is-open");
+        };
+        toggleBtn?.addEventListener("click", openDrawer);
+        closeBtn?.addEventListener("click", closeDrawer);
+        backdrop?.addEventListener("click", closeDrawer);
         const offset = new Date().getTimezoneOffset();
         document.cookie = `tz_offset=${offset}; path=/; max-age=31536000`;
         document.querySelectorAll("form").forEach(form => {

@@ -2,28 +2,380 @@
 {% load formatting %}
 {% block content %}
 
+<style>
+  .withdraw-search-toggle {
+    display: none;
+    border: 1px solid var(--border);
+    background: #fff;
+    color: var(--text);
+    border-radius: 12px;
+    padding: 10px 12px;
+    cursor: pointer;
+    font-weight: 600;
+    position: relative;
+  }
+  .withdraw-search-toggle .icon-dot {
+    width: 14px;
+    height: 14px;
+    border: 2px solid var(--text);
+    border-radius: 999px;
+    display: block;
+    position: relative;
+  }
+  .withdraw-search-toggle .icon-handle {
+    width: 8px;
+    height: 2px;
+    background: var(--text);
+    display: block;
+    position: absolute;
+    right: 11px;
+    bottom: 12px;
+    transform: rotate(45deg);
+    border-radius: 999px;
+  }
+  .mobile-main {
+    display: none;
+  }
+  .desktop-card-label {
+    font-weight: 600;
+  }
+  .mobile-label {
+    display: none;
+  }
+  .withdraw-table tbody tr.withdraw-item.is-full {
+    background: #f0fdf4;
+    border-color: #bbf7d0;
+  }
+  .withdraw-table tbody tr.withdraw-item.is-partial {
+    background: #fffbeb;
+    border-color: #fde68a;
+  }
+  @media (max-width: 720px) {
+    .withdraw-filters {
+      display: grid !important;
+      grid-template-columns: minmax(0, 3fr) minmax(0, 1fr);
+      align-items: end;
+    }
+    .withdraw-filters .withdraw-workdate {
+      grid-column: 1;
+    }
+    .withdraw-filters .withdraw-per-page {
+      grid-column: 2;
+    }
+    .withdraw-per-page {
+      min-width: 0 !important;
+    }
+    .withdraw-filters .bank-search-row {
+      grid-column: 1 / -1;
+      display: grid;
+      grid-template-columns: minmax(0, 4fr) minmax(0, 1fr);
+      gap: 6px;
+      align-items: end;
+    }
+    .withdraw-bank {
+      min-width: 0 !important;
+    }
+    .withdraw-search-toggle {
+      justify-self: end;
+    }
+    .withdraw-search-wrap {
+      grid-column: 1 / -1;
+    }
+    .withdraw-filters label {
+      width: auto !important;
+    }
+    .withdraw-search-wrap {
+      display: none !important;
+      width: 100%;
+    }
+    .withdraw-search-wrap.is-open {
+      display: flex !important;
+      flex: 1 1 100%;
+    }
+    .withdraw-search-toggle {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      height: 44px;
+      width: 44px;
+    }
+    .withdraw-table thead {
+      display: none;
+    }
+    .withdraw-table {
+      width: 100%;
+      min-width: 0 !important;
+      table-layout: fixed;
+    }
+    .withdraw-table tbody {
+      display: block;
+      width: 100%;
+    }
+    .mobile-main {
+      display: grid;
+    }
+    .mobile-toggle {
+      display: none !important;
+    }
+    .withdraw-table tbody tr.withdraw-item {
+      display: block;
+      padding: 12px;
+      border-bottom: 1px solid var(--border);
+      width: 100%;
+    }
+    .withdraw-table tbody tr.withdraw-item.is-open {
+      background: #fbfcfe;
+      border-radius: 12px;
+      border: 1px solid var(--border);
+      padding: 12px;
+      margin: 6px 0;
+    }
+    .withdraw-table tbody tr.withdraw-item td {
+      padding: 0;
+      border: none;
+      display: block;
+      width: 100%;
+    }
+    .withdraw-table .cell-card {
+      width: 100%;
+    }
+    .desktop-card-label {
+      display: none;
+    }
+    .withdraw-table tbody tr.withdraw-item .cell-pin,
+    .withdraw-table tbody tr.withdraw-item .cell-due,
+    .withdraw-table tbody tr.withdraw-item .cell-full {
+      display: none !important;
+    }
+    .withdraw-table tbody tr.withdraw-item .cell-withdrawn,
+    .withdraw-table tbody tr.withdraw-item .cell-commission,
+    .withdraw-table tbody tr.withdraw-item .cell-remaining,
+    .withdraw-table tbody tr.withdraw-item .cell-note {
+      display: none !important;
+    }
+    .withdraw-table tbody tr.withdraw-item.is-open {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+      grid-template-areas:
+        "card card"
+        "taken fee"
+        "left note";
+      column-gap: 12px;
+      row-gap: 10px;
+    }
+    .withdraw-table tbody tr.withdraw-item.is-open td {
+      width: auto;
+      min-width: 0;
+    }
+    .withdraw-table tbody tr.withdraw-item.is-open .cell-card {
+      grid-area: card;
+    }
+    .withdraw-table tbody tr.withdraw-item.is-open .cell-withdrawn {
+      grid-area: taken;
+    }
+    .withdraw-table tbody tr.withdraw-item.is-open .cell-commission {
+      grid-area: fee;
+    }
+    .withdraw-table tbody tr.withdraw-item.is-open .cell-remaining {
+      grid-area: left;
+    }
+    .withdraw-table tbody tr.withdraw-item.is-open .cell-note {
+      grid-area: note;
+    }
+    .withdraw-table tbody tr.withdraw-item.is-open .cell-withdrawn,
+    .withdraw-table tbody tr.withdraw-item.is-open .cell-commission,
+    .withdraw-table tbody tr.withdraw-item.is-open .cell-remaining,
+    .withdraw-table tbody tr.withdraw-item.is-open .cell-note {
+      display: flex !important;
+      flex-direction: column;
+      align-items: stretch;
+      gap: 6px;
+      border-top: 1px solid #edf1f7;
+      padding-top: 10px;
+      margin-top: 10px;
+      min-width: 0;
+    }
+    .withdraw-table tbody tr.withdraw-item.is-open .cell-remaining,
+    .withdraw-table tbody tr.withdraw-item.is-open .cell-note {
+      background: #fff;
+      border-radius: 10px;
+      padding: 10px;
+    }
+    .withdraw-table tbody tr.withdraw-item.is-open .col-money-input {
+      width: auto !important;
+      min-width: 0 !important;
+    }
+    .withdraw-table tbody tr.withdraw-item.is-open .currency-input,
+    .withdraw-table tbody tr.withdraw-item.is-open .currency-input input {
+      width: 100% !important;
+      min-width: 0 !important;
+      max-width: 100% !important;
+      box-sizing: border-box;
+    }
+    .withdraw-table .mobile-main {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      width: 100%;
+      max-width: 100%;
+    }
+    .withdraw-table .col-money-input,
+    .withdraw-table .col-money {
+      width: auto;
+      min-width: 0;
+    }
+    .withdraw-table .mobile-main .card {
+      font-weight: 600;
+      line-height: 1.25;
+    }
+    .withdraw-table .mobile-meta {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+      width: 100%;
+      max-width: 100%;
+    }
+    .withdraw-table .mobile-meta .pin,
+    .withdraw-table .mobile-meta .due,
+    .withdraw-table .mobile-meta .full-inline {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+    }
+    .withdraw-table .mobile-meta .pin {
+      font-weight: 600;
+      font-size: 0.9rem;
+    }
+    .withdraw-table .mobile-meta .pin-value {
+      font-weight: 700;
+      color: var(--text);
+    }
+    .withdraw-table .mobile-meta .pin::after,
+    .withdraw-table .mobile-meta .due::after {
+      content: "|";
+      color: var(--muted);
+      margin-left: 6px;
+    }
+    .withdraw-table .mobile-meta span {
+      font-size: 0.7rem;
+      color: var(--muted);
+      margin-right: 4px;
+      text-transform: uppercase;
+      letter-spacing: 0.02em;
+    }
+    .withdraw-table .mobile-main .pin {
+      font-size: 0.85rem;
+      color: var(--muted);
+      white-space: nowrap;
+    }
+    .withdraw-table .mobile-main .due {
+      font-weight: 600;
+      white-space: nowrap;
+    }
+    .withdraw-table .full-inline {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 0.85rem;
+    }
+    .withdraw-table .mobile-toggle {
+      border: 1px solid var(--border);
+      background: #fff;
+      color: var(--text);
+      padding: 6px 10px;
+      border-radius: 999px;
+      font-weight: 600;
+      height: 36px;
+      margin-top: 8px;
+    }
+    .withdraw-table tfoot {
+      display: none;
+    }
+    .mobile-totals {
+      display: none;
+    }
+    .mobile-totals::before {
+      content: "";
+      position: absolute;
+      top: -12px;
+      left: 0;
+      right: 0;
+      height: 1px;
+      background: #edf1f7;
+    }
+    .mobile-totals .totals-title {
+      grid-column: 1 / -1;
+      font-weight: 700;
+      margin-bottom: 2px;
+    }
+    .mobile-totals .totals-label {
+      font-size: 0.75rem;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      color: var(--muted);
+    }
+    .mobile-totals .totals-value {
+      font-weight: 600;
+      text-align: right;
+    }
+    .table-card.table-scroll {
+      overflow-x: hidden;
+    }
+    .mobile-label {
+      display: inline-block;
+      font-size: 0.7rem;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      color: var(--muted);
+    }
+    .withdraw-table tbody tr.withdraw-item.is-open .currency-input {
+      width: 100%;
+    }
+    .withdraw-table tbody tr.withdraw-item.is-open .currency-input input {
+      width: 100%;
+    }
+    .mobile-totals {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 8px 12px;
+      padding: 12px 0;
+      border-top: 1px solid var(--border);
+      margin-top: 20px;
+      position: relative;
+    }
+
+  }
+
+  .mobile-only {
+    display: none !important;
+  }
+  @media (max-width: 720px) {
+    .mobile-only {
+      display: block !important;
+    }
+    .mobile-totals {
+      display: grid !important;
+      grid-template-columns: 1fr auto;
+      gap: 8px 12px;
+      padding: 12px 0;
+      border-top: 1px solid var(--border);
+      margin-top: 20px;
+      position: relative;
+    }
+  }
+</style>
+
 <section class="section-card">
     <div style="display:flex; flex-direction:column; gap:12px;">
       <h2 style="margin:0;">Withdraw Today</h2>
-      <div style="display:flex; flex-wrap:wrap; gap:12px; width:100%;">
-        <label style="display:flex; flex-direction:column; min-width:160px;">
+      <div class="filters-row withdraw-filters" style="display:flex; flex-wrap:wrap; gap:12px; width:100%;">
+        <label class="withdraw-workdate" style="display:flex; flex-direction:column; min-width:160px;">
           <span>Work date</span>
           <div class="date-field">
             <input id="workdate" type="text" placeholder="dd/mm/yyyy" value="{{ day_display }}" autocomplete="off" inputmode="numeric" class="date-input js-date-input">
             <button type="button" class="calendar-toggle" aria-label="Open calendar">&#128197;</button>
           </div>
-        </label>
-        <label style="display:flex; flex-direction:column; min-width:220px;">
-          <span>Bank filter</span>
-          <div class="combo-wrapper">
-            <input type="hidden" id="bank-filter" value="{{ selected_bank }}">
-            <input type="text" id="bank-input" class="combo-input" data-combo-list="withdraw-bank-options" placeholder="Start typing bank..." value="{{ selected_bank }}" autocomplete="off" autocorrect="off" autocapitalize="none" spellcheck="false">
-            <div class="combo-dropdown"></div>
-          </div>
-        </label>
-        <label style="display:flex; flex-direction:column; min-width:220px; flex:1;">
-          <span>Search</span>
-          <input type="text" id="withdraw-search" placeholder="Search card/bank/pin..." value="{{ query }}" autocomplete="off">
         </label>
         <label class="withdraw-per-page" style="display:flex; flex-direction:column; min-width:140px;">
           <span>Per page</span>
@@ -32,6 +384,24 @@
               <option value="{{ option }}" {% if option == per_page %}selected{% endif %}>{{ option }}</option>
             {% endfor %}
           </select>
+        </label>
+        <div class="bank-search-row">
+          <label class="withdraw-bank" style="display:flex; flex-direction:column; min-width:220px;">
+            <span>Bank filter</span>
+            <div class="combo-wrapper">
+              <input type="hidden" id="bank-filter" value="{{ selected_bank }}">
+              <input type="text" id="bank-input" class="combo-input" data-combo-list="withdraw-bank-options" placeholder="Start typing bank..." value="{{ selected_bank }}" autocomplete="off" autocorrect="off" autocapitalize="none" spellcheck="false">
+              <div class="combo-dropdown"></div>
+            </div>
+          </label>
+          <button type="button" class="withdraw-search-toggle" aria-label="Search">
+            <span class="icon-dot"></span>
+            <span class="icon-handle"></span>
+          </button>
+        </div>
+        <label class="withdraw-search-wrap" style="display:flex; flex-direction:column; min-width:220px; flex:1;">
+          <span>Search</span>
+          <input type="text" id="withdraw-search" placeholder="Search card/bank/pin..." value="{{ query }}" autocomplete="off">
         </label>
         <datalist id="withdraw-bank-options">
           {% for bank in banks %}
@@ -49,11 +419,11 @@
 		  <tr>
 			<th class="col-card">Card</th>
 			<th class="col-pin">PIN</th>
-			<th class="num col-money">Due ₽</th>
+            <th class="num col-money">Due ₽</th>
 			<th class="col-full">Full</th>
-			<th class="num col-money-input">Taken ₽</th>
-			<th class="num col-money-input">Fee ₽</th>
-			<th class="num col-money">Left ₽</th>
+            <th class="num col-money-input">Taken ₽</th>
+            <th class="num col-money-input">Fee ₽</th>
+            <th class="num col-money">Left ₽</th>
 			<th class="col-note">Note</th>
 		  </tr>
 		</thead>
@@ -62,17 +432,32 @@
 
 		<tbody>
 		  {% for r in page_obj %}
-			<tr data-card-id="{{ r.card_id }}" data-should="{{ r.should_have|floatformat:'2' }}">
-			  <td class="col-card">{{ r.card_label }}</td>
-			  <td class="col-pin"><b>{{ r.pin }}</b></td>
-			  <td class="num col-money"><b>{{ r.should_have|spaced_number }} ₽</b></td>
+			<tr class="withdraw-item" data-card-id="{{ r.card_id }}" data-should="{{ r.should_have|floatformat:'2' }}">
+			  <td class="col-card cell-card">
+				<div class="desktop-card-label">{{ r.card_label }}</div>
+				<div class="mobile-main">
+				  <div class="card">{{ r.card_label }}</div>
+				  <div class="mobile-meta">
+					<div class="pin"><span>PIN</span><strong class="pin-value">{{ r.pin }}</strong></div>
+					<div class="due"><span>Due</span>{{ r.should_have|spaced_number }} ₽</div>
+					<label class="full-inline">
+					  <input type="checkbox" class="full primary-full"
+							 {% if r.withdrawal and r.withdrawal.fully_withdrawn %}checked{% endif %}>
+					  Full
+					</label>
+				  </div>
+				</div>
+			  </td>
+			  <td class="col-pin cell-pin"><b>{{ r.pin }}</b></td>
+			  <td class="num col-money cell-due"><b>{{ r.should_have|spaced_number }} ₽</b></td>
 
-			  <td class="col-full">
-				<input type="checkbox" class="full"
+			  <td class="col-full cell-full">
+				<input type="checkbox" class="full secondary-full"
 					   {% if r.withdrawal and r.withdrawal.fully_withdrawn %}checked{% endif %}>
 			  </td>
 
-			  <td class="num col-money-input">
+			  <td class="num col-money-input cell-withdrawn">
+						<span class="mobile-label">Taken ₽</span>
 				<div class="currency-input">
 				  <span class="currency-prefix">₽</span>
 				  <input type="text" inputmode="decimal" class="withdrawn" 
@@ -81,7 +466,8 @@
 				</div>
 			  </td>
 
-			  <td class="num col-money-input">
+			  <td class="num col-money-input cell-commission">
+						<span class="mobile-label">Fee ₽</span>
 				<div class="currency-input">
 				  <span class="currency-prefix">₽</span>
 				  <input type="text" inputmode="decimal" class="commission" 
@@ -90,9 +476,11 @@
 				</div>
 			  </td>
 
-			  <td class="num col-money"><b class="remaining-value">{{ r.remaining|spaced_number }} ₽</b></td>
+			  <td class="num col-money cell-remaining">
+						<span class="mobile-label">Left ₽</span><b class="remaining-value">{{ r.remaining|spaced_number }} ₽</b></td>
 
-			  <td class="col-note">
+			  <td class="col-note cell-note">
+						<span class="mobile-label">Note</span>
 				<div class="note-cell {% if r.withdrawal and r.withdrawal.note %}has-note{% endif %}">
 				  <button type="button" class="note-trigger" aria-label="{% if r.withdrawal and r.withdrawal.note %}Edit note{% else %}Add note{% endif %}">
 					{% if r.withdrawal and r.withdrawal.note %}
@@ -112,21 +500,31 @@
 		</tbody>
 		<tfoot>
 		  <tr>
-			<td colspan="2"><b>Totals</b></td>
-			<td class="num col-money"><b id="total-should">{{ totals.should|default:0|spaced_number }}</b> ₽</td>
-			<td></td>
-			<td class="num col-money"><b id="total-withdrawn">{{ totals.withdrawn|default:0|spaced_number }}</b> ₽</td>
-			<td class="num col-money"><b id="total-commission">{{ totals.commission|default:0|spaced_number }}</b> ₽</td>
-			<td class="num col-money"><b id="total-remaining">{{ totals.remaining|default:0|spaced_number }}</b> ₽</td>
-			<td></td>
+			<td colspan="2" class="totals-title"><b>Totals</b></td>
+			<td class="num col-money totals-cell" data-label="Total Received"><b id="total-should">{{ totals.should|default:0|spaced_number }}</b> ₽</td>
+			<td class="totals-spacer"></td>
+			<td class="num col-money totals-cell" data-label="Total Withdrawn"><b id="total-withdrawn">{{ totals.withdrawn|default:0|spaced_number }}</b> ₽</td>
+			<td class="num col-money totals-cell" data-label="Total Fee"><b id="total-commission">{{ totals.commission|default:0|spaced_number }}</b> ₽</td>
+			<td class="num col-money totals-cell" data-label="Total Remaining"><b id="total-remaining">{{ totals.remaining|default:0|spaced_number }}</b> ₽</td>
+			<td class="totals-spacer"></td>
 		  </tr>
 		</tfoot>
 	  </table>
+  <div class="mobile-totals mobile-only">
+    <div class="totals-title">Totals</div>
+    <div class="totals-label">Total Received</div>
+    <div class="totals-value"><span id="total-should-mobile">{{ totals.should|default:0|spaced_number }}</span> ₽</div>
+    <div class="totals-label">Total Withdrawn</div>
+    <div class="totals-value"><span id="total-withdrawn-mobile">{{ totals.withdrawn|default:0|spaced_number }}</span> ₽</div>
+    <div class="totals-label">Total Fee</div>
+    <div class="totals-value"><span id="total-commission-mobile">{{ totals.commission|default:0|spaced_number }}</span> ₽</div>
+    <div class="totals-label">Total Remaining</div>
+    <div class="totals-value"><span id="total-remaining-mobile">{{ totals.remaining|default:0|spaced_number }}</span> ₽</div>
   </div>
 
-    <p style="margin-top:12px; color:var(--muted); font-size:0.9rem;">
-      Tip: edit withdrawals inline and they autosave instantly.
-    </p>
+  </div>
+
+    
 </section>
 
 <div class="note-modal" id="note-modal">
@@ -179,15 +577,7 @@
 	  let pendingNavUrl = null;
 
 	  function setSavingText() {
-		let el = document.getElementById("saving-status");
-		if (!el) {
-		  el = document.createElement("div");
-		  el.id = "saving-status";
-		  el.style.margin = "8px 0";
-		  el.style.fontSize = "12px";
-		  document.body.querySelector("main")?.prepend(el);
-		}
-		el.textContent = inFlight > 0 ? "Saving..." : "";
+		// No-op: avoid layout jump on autosave.
 	  }
 
 	  function parseNumber(value) {
@@ -228,11 +618,15 @@
 
 	  function computeRowState(row) {
 		const should = parseNumber(row.dataset.should);
-		const fullEl = row.querySelector(".full");
+		const fullEl = row.querySelector(".primary-full") || row.querySelector(".full");
+		const secondaryFull = row.querySelector(".secondary-full");
 		const withdrawnEl = row.querySelector(".withdrawn");
 		const commissionEl = row.querySelector(".commission");
 
 		const full = fullEl?.checked ?? false;
+		if (secondaryFull && secondaryFull !== fullEl) {
+		  secondaryFull.checked = full;
+		}
 		if (withdrawnEl) {
 		  withdrawnEl.disabled = full;
 		}
@@ -248,6 +642,9 @@
 		if (remainingEl) {
 		  remainingEl.textContent = `${formatNumber(remaining)} ₽`;
 		}
+
+		row.classList.toggle("is-full", full);
+		row.classList.toggle("is-partial", !full && (withdrawn > 0 || commission > 0));
 
 		return { should, withdrawn, commission, remaining };
 	  }
@@ -277,10 +674,14 @@
 	  }
 
 	  function applyFullState(row, confirmChange = false) {
-		const fullEl = row.querySelector(".full");
+		const fullEl = row.querySelector(".primary-full") || row.querySelector(".full");
+		const secondaryFull = row.querySelector(".secondary-full");
 		const withdrawnEl = row.querySelector(".withdrawn");
 		const commissionEl = row.querySelector(".commission");
 		const full = fullEl?.checked ?? false;
+		if (secondaryFull && secondaryFull !== fullEl) {
+		  secondaryFull.checked = full;
+		}
 		if (full && confirmChange && withdrawnEl && withdrawnEl.value.trim()) {
 		  const ok = window.confirm("Full will ignore the Taken amount. Continue?");
 		  if (!ok) {
@@ -305,12 +706,16 @@
 		const timestamp = workdate && hh && mm ? `${workdate} ${hh}:${mm}` : "";
 		const tzOffset = now.getTimezoneOffset();
 
-		const fullEl = row.querySelector(".full");
+		const fullEl = row.querySelector(".primary-full") || row.querySelector(".full");
+		const secondaryFull = row.querySelector(".secondary-full");
 		const withdrawnEl = row.querySelector(".withdrawn");
 		const commissionEl = row.querySelector(".commission");
 		const noteEl = row.querySelector(".note");
 
 		const full = fullEl?.checked ?? false;
+		if (secondaryFull && secondaryFull !== fullEl) {
+		  secondaryFull.checked = full;
+		}
 		if (withdrawnEl) {
 		  withdrawnEl.disabled = full; // keeps UI aligned with server logic
 		}
@@ -371,17 +776,37 @@
 			autosave(row);
 		  });
 
-		  const fullEl = row.querySelector(".full");
-		  if (fullEl) {
-			fullEl.addEventListener("change", () => {
-			  const applied = applyFullState(row, true);
-			  if (!applied) {
-				fullEl.checked = false;
-				applyFullState(row, false);
+		  const mobileMain = row.querySelector(".mobile-main");
+		  if (mobileMain) {
+			mobileMain.addEventListener("click", (e) => {
+			  if (e.target.closest("input") || e.target.closest("label") || e.target.closest("button")) {
 				return;
 			  }
-			  refreshTotals();
-			  autosave(row);
+			  row.classList.toggle("is-open");
+			});
+		  }
+
+		  const fullInputs = Array.from(row.querySelectorAll(".full"));
+		  if (fullInputs.length) {
+			fullInputs.forEach(input => {
+			  input.addEventListener("change", () => {
+				fullInputs.forEach(other => {
+				  if (other !== input) {
+					other.checked = input.checked;
+				  }
+				});
+				const applied = applyFullState(row, true);
+				if (!applied) {
+				  input.checked = false;
+				  fullInputs.forEach(other => {
+					other.checked = false;
+				  });
+				  applyFullState(row, false);
+				  return;
+				}
+				refreshTotals();
+				autosave(row);
+			  });
 			});
 			applyFullState(row, false);
 		  }
@@ -489,6 +914,8 @@
 	  const bankInput = document.getElementById("bank-input");
 	  const bankDropdown = bankInput?.parentElement?.querySelector(".combo-dropdown");
 	  const searchInput = document.getElementById("withdraw-search");
+	  const searchToggle = document.querySelector(".withdraw-search-toggle");
+	  const searchWrap = document.querySelector(".withdraw-search-wrap");
 	  const perPageSelect = document.getElementById("withdraw-per-page");
 	  const perPageLabel = document.querySelector(".withdraw-per-page");
 	  const tbody = document.querySelector(".table-card table tbody");
@@ -503,6 +930,18 @@
 		id: opt.dataset.id || opt.value,
 		label: opt.value
 	  }));
+
+	  if (searchToggle && searchWrap) {
+		if (searchInput && searchInput.value.trim()) {
+		  searchWrap.classList.add("is-open");
+		}
+		searchToggle.addEventListener("click", () => {
+		  searchWrap.classList.toggle("is-open");
+		  if (searchWrap.classList.contains("is-open")) {
+			searchInput?.focus();
+		  }
+		});
+	  }
 
 	  function setUrlQuery(term) {
 		const params = new URLSearchParams();
@@ -541,7 +980,7 @@
 	  function renderRows(items) {
 		if (!tbody) return;
 		if (!items.length) {
-		  tbody.innerHTML = "<tr><td colspan=\"8\">No cards to withdraw for this date.</td></tr>";
+		  tbody.innerHTML = '<tr><td colspan="8">No cards to withdraw for this date.</td></tr>';
 		  return;
 		}
 		tbody.innerHTML = items.map(item => {
@@ -562,21 +1001,44 @@
 			: `<span class="note-icon">+</span>`;
 		  const noteLabel = note ? "Edit note" : "Add note";
 		  return `
-			<tr data-card-id="${escapeHtml(item.card_id)}" data-should="${escapeHtml(shouldRaw)}">
-			  <td class="col-card">${cardLabel}</td>
-			  <td><b>${pin}</b></td>
-			  <td class="num col-money"><b>${should} ₽</b></td>
-			  <td class="col-full">
-				<input type="checkbox" class="full" ${fullAttr}>
+			<tr class="withdraw-item" data-card-id="${escapeHtml(item.card_id)}" data-should="${escapeHtml(shouldRaw)}">
+			  <td class="col-card cell-card">
+				<div class="desktop-card-label">${cardLabel}</div>
+				<div class="mobile-main">
+				  <div class="card">${cardLabel}</div>
+				  <div class="mobile-meta">
+					<div class="pin"><span>PIN</span><strong class="pin-value">${pin}</strong></div>
+					<div class="due"><span>Due</span>${should} ₽</div>
+					<label class="full-inline">
+					  <input type="checkbox" class="full primary-full" ${fullAttr}>
+					  Full
+					</label>
+				  </div>
+				</div>
 			  </td>
-			  <td class="num col-money-input">
-				<input type="text" inputmode="decimal" class="withdrawn" value="${escapeHtml(withdrawnVal)}" ${disabledAttr}>
+			  <td class="col-pin cell-pin"><b>${pin}</b></td>
+			  <td class="num col-money cell-due"><b>${should} ₽</b></td>
+			  <td class="col-full cell-full">
+				<input type="checkbox" class="full secondary-full" ${fullAttr}>
 			  </td>
-			  <td class="num col-money-input">
-				<input type="text" inputmode="decimal" class="commission" value="${escapeHtml(commissionVal)}" ${disabledAttr}>
+			  <td class="num col-money-input cell-withdrawn">
+						<span class="mobile-label">Taken ₽</span>
+				<div class="currency-input">
+				  <span class="currency-prefix">₽</span>
+				  <input type="text" inputmode="decimal" class="withdrawn" value="${escapeHtml(withdrawnVal)}" ${disabledAttr}>
+				</div>
 			  </td>
-			  <td class="num col-money"><b class="remaining-value">${remaining} ₽</b></td>
-			  <td>
+			  <td class="num col-money-input cell-commission">
+						<span class="mobile-label">Fee ₽</span>
+				<div class="currency-input">
+				  <span class="currency-prefix">₽</span>
+				  <input type="text" inputmode="decimal" class="commission" value="${escapeHtml(commissionVal)}" ${disabledAttr}>
+				</div>
+			  </td>
+			  <td class="num col-money cell-remaining">
+						<span class="mobile-label">Left ₽</span><b class="remaining-value">${remaining} ₽</b></td>
+			  <td class="col-note cell-note">
+						<span class="mobile-label">Note</span>
 				<div class="${noteClass}">
 				  <button type="button" class="note-trigger" aria-label="${noteLabel}">${noteIcon}</button>
 				  <input type="hidden" class="note note-input" value="${escapeHtml(note)}">
