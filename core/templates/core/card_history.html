@@ -1,6 +1,92 @@
 {% extends "core/base.html" %}
 {% load formatting %}
 {% block content %}
+<style>
+  @media (max-width: 720px) {
+    .card-history-table {
+      width: 100%;
+      min-width: 0;
+      table-layout: fixed;
+    }
+    .card-history-table thead {
+      display: none;
+    }
+    .card-history-table tbody {
+      display: block;
+      width: 100%;
+    }
+    .card-history-table tr {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      grid-template-areas:
+        "time type"
+        "client client"
+        "rub usd"
+        "taken fee"
+        "balance note";
+      gap: 6px 12px;
+      width: 100%;
+      padding: 12px;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      background: #fff;
+      margin-bottom: 12px;
+    }
+    .card-history-table td {
+      display: block;
+      padding: 6px 0;
+      border: none;
+      min-width: 0;
+    }
+    .card-history-table td::before {
+      content: attr(data-label);
+      display: block;
+      font-size: 0.7rem;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      color: var(--muted);
+      margin-bottom: 4px;
+    }
+    .card-history-table td:nth-child(1) { grid-area: time; font-weight: 600; }
+    .card-history-table td:nth-child(2) { grid-area: type; color: var(--muted); font-size: 0.9rem; text-align: right; }
+    .card-history-table td:nth-child(3) { grid-area: client; }
+    .card-history-table td:nth-child(4) { grid-area: rub; color: var(--muted); font-size: 0.9rem; }
+    .card-history-table td:nth-child(5) { grid-area: usd; color: var(--muted); font-size: 0.9rem; }
+    .card-history-table td:nth-child(6) { grid-area: taken; color: var(--muted); font-size: 0.9rem; }
+    .card-history-table td:nth-child(7) { grid-area: fee; color: var(--muted); font-size: 0.9rem; }
+    .card-history-table td:nth-child(8) { grid-area: balance; color: var(--muted); font-size: 0.9rem; }
+    .card-history-table td:nth-child(9) { grid-area: note; }
+    .card-history-table td:nth-child(2)::before {
+      text-align: right;
+    }
+    .card-history-totals thead,
+    .card-history-totals tbody {
+      display: none;
+    }
+    .mobile-history-totals {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 10px 12px;
+      padding: 12px;
+      border-top: 1px solid var(--border);
+    }
+    .mobile-history-totals .totals-title {
+      grid-column: 1 / -1;
+      font-weight: 700;
+      margin-bottom: 2px;
+    }
+    .mobile-history-totals .totals-label {
+      font-size: 0.75rem;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+    .mobile-history-totals .totals-value {
+      text-align: right;
+      font-weight: 600;
+    }
+  }
+</style>
 <section class="section-card">
   <div style="display:flex; flex-wrap:wrap; gap:16px; align-items:center; justify-content:space-between;">
     <div>
@@ -40,7 +126,7 @@
     </label>
   </form>
   <div class="table-card mobile-cards" style="margin-top:16px;">
-    <table>
+    <table class="card-history-totals">
       <thead>
         <tr><th>Total received &#8381;</th><th>Total withdrawn &#8381;</th><th>Total commission &#8381;</th><th>Balance &#8381;</th></tr>
       </thead>
@@ -53,13 +139,24 @@
         </tr>
       </tbody>
     </table>
+    <div class="mobile-history-totals">
+      <div class="totals-title">Totals</div>
+      <div class="totals-label">Total Received</div>
+      <div class="totals-value"><span data-total="received">{{ received_total|spaced_number }}</span> &#8381;</div>
+      <div class="totals-label">Total Withdrawn</div>
+      <div class="totals-value"><span data-total="withdrawn">{{ withdrawn_total|spaced_number }}</span> &#8381;</div>
+      <div class="totals-label">Total Fee</div>
+      <div class="totals-value"><span data-total="commission">{{ commission_total|spaced_number }}</span> &#8381;</div>
+      <div class="totals-label">Total Remaining</div>
+      <div class="totals-value"><span data-total="balance">{{ balance_total|spaced_number }}</span> &#8381;</div>
+    </div>
   </div>
 </section>
 
 <section class="section-card">
   <h3 style="margin-top:0;">History</h3>
   <div class="table-card table-scroll mobile-cards" style="margin-top:12px;">
-    <table>
+    <table class="card-history-table">
       <thead>
         <tr>
           <th>Time</th>
@@ -76,15 +173,15 @@
       <tbody class="history-events">
         {% for item in events %}
           <tr>
-            <td data-utc="{{ item.time_iso }}"><span class="time-text">{{ item.time_display }}</span>{% if item.kind == "withdrawal" %}<button type="button" class="note-trigger withdraw-edit" onclick="openWithdrawTimeModal(this);return false;" data-withdraw-id="{{ item.withdrawal_id }}" data-withdraw-time="{{ item.time_display }}" data-withdraw-iso="{{ item.time_iso }}" aria-label="Edit withdrawal time">&#9998;</button>{% endif %}</td>
-            <td>{% if item.kind == "transaction" %}Transaction{% else %}Withdrawal{% endif %}</td>
-            <td>{{ item.client|default:"-" }}</td>
-            <td>{% if item.rub %}{{ item.rub|spaced_number }} &#8381;{% else %}-{% endif %}</td>
-            <td>{% if item.usd %}{{ item.usd|spaced_number }} ${% else %}-{% endif %}</td>
-            <td>{% if item.withdrawn %}{{ item.withdrawn|spaced_number }} &#8381;{% else %}-{% endif %}</td>
-            <td>{% if item.commission %}{{ item.commission|spaced_number }} &#8381;{% else %}-{% endif %}</td>
-            <td>{{ item.balance|spaced_number }} &#8381;</td>
-            <td>{{ item.note|default:"-" }}</td>
+            <td data-label="Time" data-utc="{{ item.time_iso }}"><span class="time-text">{{ item.time_display }}</span>{% if item.kind == "withdrawal" %}<button type="button" class="note-trigger withdraw-edit" onclick="openWithdrawTimeModal(this);return false;" data-withdraw-id="{{ item.withdrawal_id }}" data-withdraw-time="{{ item.time_display }}" data-withdraw-iso="{{ item.time_iso }}" aria-label="Edit withdrawal time">&#9998;</button>{% endif %}</td>
+            <td data-label="Type">{% if item.kind == "transaction" %}Transaction{% else %}Withdrawal{% endif %}</td>
+            <td data-label="Client">{{ item.client|default:"-" }}</td>
+            <td data-label="RUB">{% if item.rub %}{{ item.rub|spaced_number }} &#8381;{% else %}-{% endif %}</td>
+            <td data-label="USD">{% if item.usd %}{{ item.usd|spaced_number }} ${% else %}-{% endif %}</td>
+            <td data-label="Taken">{% if item.withdrawn %}{{ item.withdrawn|spaced_number }} &#8381;{% else %}-{% endif %}</td>
+            <td data-label="Fee">{% if item.commission %}{{ item.commission|spaced_number }} &#8381;{% else %}-{% endif %}</td>
+            <td data-label="Balance">{{ item.balance|spaced_number }} &#8381;</td>
+            <td data-label="Note">{{ item.note|default:"-" }}</td>
           </tr>
         {% empty %}
           <tr><td colspan="9">No history recorded for this card.</td></tr>
@@ -235,10 +332,10 @@
       const withdrawn = totalsRow.querySelector("[data-total='withdrawn']");
       const commission = totalsRow.querySelector("[data-total='commission']");
       const balance = totalsRow.querySelector("[data-total='balance']");
-      if (received) received.textContent = totals.received ? `${totals.received} ${RUB}` : "";
-      if (withdrawn) withdrawn.textContent = totals.withdrawn ? `${totals.withdrawn} ${RUB}` : "";
-      if (commission) commission.textContent = totals.commission ? `${totals.commission} ${RUB}` : "";
-      if (balance) balance.textContent = totals.balance ? `${totals.balance} ${RUB}` : "";
+      if (received) received.textContent = totals.received || "";
+      if (withdrawn) withdrawn.textContent = totals.withdrawn || "";
+      if (commission) commission.textContent = totals.commission || "";
+      if (balance) balance.textContent = totals.balance || "";
     }
 
     function renderEvents(items) {
@@ -253,15 +350,15 @@
           : "";
         return `
           <tr>
-            <td data-utc="${escapeHtml(item.time_iso || '')}"><span class="time-text">${escapeHtml(item.time || "")}</span>${editBtn}</td>
-            <td>${escapeHtml(item.type)}</td>
-            <td>${escapeHtml(item.client || "-")}</td>
-            <td>${item.rub ? `${escapeHtml(item.rub)} ${RUB}` : "-"}</td>
-            <td>${item.usd ? `${escapeHtml(item.usd)} $` : "-"}</td>
-            <td>${item.withdrawn ? `${escapeHtml(item.withdrawn)} ${RUB}` : "-"}</td>
-            <td>${item.commission ? `${escapeHtml(item.commission)} ${RUB}` : "-"}</td>
-            <td>${escapeHtml(item.balance)} ${RUB}</td>
-            <td>${escapeHtml(item.note || "-")}</td>
+            <td data-label="Time" data-utc="${escapeHtml(item.time_iso || '')}"><span class="time-text">${escapeHtml(item.time || "")}</span>${editBtn}</td>
+            <td data-label="Type">${escapeHtml(item.type)}</td>
+            <td data-label="Client">${escapeHtml(item.client || "-")}</td>
+            <td data-label="RUB">${item.rub ? `${escapeHtml(item.rub)} ${RUB}` : "-"}</td>
+            <td data-label="USD">${item.usd ? `${escapeHtml(item.usd)} $` : "-"}</td>
+            <td data-label="Taken">${item.withdrawn ? `${escapeHtml(item.withdrawn)} ${RUB}` : "-"}</td>
+            <td data-label="Fee">${item.commission ? `${escapeHtml(item.commission)} ${RUB}` : "-"}</td>
+            <td data-label="Balance">${escapeHtml(item.balance)} ${RUB}</td>
+            <td data-label="Note">${escapeHtml(item.note || "-")}</td>
           </tr>
         `;
       }).join("");

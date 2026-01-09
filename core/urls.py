@@ -31,6 +31,7 @@ urlpatterns = [
     path("transactions/add/", views.transaction_add, name="transaction_add"),
     path("transactions/<int:pk>/edit/", views.transaction_edit, name="transaction_edit"),
     path("transactions/<int:pk>/delete/", views.transaction_delete, name="transaction_delete"),
+    path("transactions/<int:pk>/note/", views.transaction_update_note, name="transaction_update_note"),
     path("payments/", views.payments_summary, name="payments_summary"),
     path("payments/export/", views.payments_export, name="payments_export"),
     path("payments/search/", views.payments_search, name="payments_search"),

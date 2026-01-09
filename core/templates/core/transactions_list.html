@@ -3,39 +3,107 @@
 {% block content %}
 <style>
   @media (max-width: 720px) {
-    .transactions-filters {
-      display: grid !important;
+      .transaction-form-grid {
+        grid-template-columns: 1.5fr 1fr !important;
+        grid-template-areas:
+          "timestamp notes"
+          "client client"
+          "card card"
+          "amount_row amount_row"
+          "actions actions" !important;
+        grid-auto-columns: 0;
+        overflow: hidden;
+      }
+    .transaction-form-grid input,
+    .transaction-form-grid select,
+    .transaction-form-grid .combo-input,
+    .transaction-form-grid .date-field,
+    .transaction-form-grid .combo-wrapper {
+      width: 100%;
+    }
+    .transaction-form-grid .date-field input {
+      width: 100%;
+    }
+      .transaction-form-grid .tx-timestamp { grid-area: timestamp; grid-column: 1 / 2 !important; }
+      .transaction-form-grid .tx-client { grid-area: client; }
+      .transaction-form-grid .tx-card { grid-area: card; }
+    .transaction-form-grid .tx-amount-row {
+      grid-area: amount_row;
+      grid-column: 1 / -1;
+      display: grid;
       grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
       gap: 10px 12px;
     }
-    .transactions-filters .search-per-page-row {
-      display: grid;
-      grid-template-columns: minmax(0, 4fr) minmax(0, 1fr);
-      gap: 10px 12px;
-      grid-column: 1 / -1;
-      align-items: end;
+    .transaction-form-grid .tx-amount-row .tx-amount-rub,
+    .transaction-form-grid .tx-amount-row .tx-amount-usd {
+      grid-area: auto;
     }
+    .transaction-form-grid .tx-notes {
+      grid-area: notes;
+      grid-column: 2 / 3 !important;
+    }
+    .transaction-form-grid .tx-amount-row {
+      display: grid;
+    }
+    .transaction-form-grid .tx-amount-row .tx-amount-rub,
+    .transaction-form-grid .tx-amount-row .tx-amount-usd {
+      grid-column: auto;
+    }
+    .transaction-form-grid .notes-field {
+      grid-column: auto !important;
+      margin-top: 0;
+    }
+    .transaction-form-grid .transaction-actions {
+      grid-area: actions;
+      grid-column: 1 / -1 !important;
+      justify-self: stretch;
+      align-self: stretch !important;
+    }
+    .transaction-form-grid .transaction-actions button {
+      width: 100%;
+    }
+    .transaction-form-grid .notes-field {
+      height: 100%;
+    }
+    .transaction-form-grid .notes-field .notes-header {
+      width: 100%;
+    }
+    .transaction-form-grid .tx-notes {
+      align-self: end;
+    }
+      .transaction-form-grid .tx-notes .notes-field,
+      .transaction-form-grid .tx-notes textarea,
+      .transaction-form-grid .tx-notes .notes-header {
+        width: 100%;
+      }
+      .transaction-form-grid .tx-notes .notes-field {
+        width: 100%;
+        margin-left: 0;
+      }
+      .transactions-filters {
+        display: grid !important;
+        grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+        gap: 10px 12px;
+      }
+    .transactions-filters .search-per-page-row {
+        grid-template-columns: minmax(0, 4fr) minmax(0, 1fr);
+        gap: 10px;
+        grid-column: 1 / -1;
+      }
     .transactions-filters .search-per-page-row label {
       display: flex;
       flex-direction: column;
       gap: 0;
+      min-width: 0 !important;
     }
     .transactions-filters .search-per-page-row input,
     .transactions-filters .search-per-page-row select {
       min-height: 44px;
     }
-    .transactions-filters .search-per-page-row .filter-search {
-      grid-column: 1 / 2;
-    }
+    .transactions-filters .search-per-page-row .filter-search,
     .transactions-filters .search-per-page-row .transactions-per-page {
-      grid-column: 2 / 3;
-    }
-    .transactions-filters .filter-search {
-      grid-column: 1 / 2;
-    }
-    .transactions-filters .transactions-per-page {
-      grid-column: 2 / 3;
-    }
+        min-width: 0 !important;
+      }
     .transactions-filters label {
       min-width: 0 !important;
     }
@@ -58,6 +126,7 @@
         "time rate"
         "client card"
         "rub usd"
+        "note note"
         "actions actions";
       gap: 6px 12px;
       width: 100%;
@@ -86,7 +155,7 @@
       font-size: 0.9rem;
       color: var(--muted);
     }
-    .transactions-table td:nth-child(7) {
+    .transactions-table td:nth-child(8) {
       grid-column: 1 / -1;
       padding-top: 8px;
     }
@@ -96,22 +165,171 @@
     .transactions-table td:nth-child(5) { grid-area: card; }
     .transactions-table td:nth-child(3) { grid-area: rub; }
     .transactions-table td:nth-child(4) { grid-area: usd; }
-    .transactions-table td:nth-child(7) { grid-area: actions; }
+    .transactions-table td:nth-child(7) { grid-area: note; }
+    .transactions-table td:nth-child(8) { grid-area: actions; }
+    .transactions-table tr.tx-no-note {
+      grid-template-areas:
+        "time rate"
+        "client card"
+        "rub usd"
+        "actions actions";
+    }
+    .transactions-table td.tx-note-empty {
+      display: none;
+    }
   }
   .transactions-filters .search-per-page-row {
-    display: flex;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 140px);
     gap: 12px;
-    align-items: flex-end;
-    flex: 1 1 360px;
+    align-items: end;
+    width: 100%;
+  }
+  @media (max-width: 720px) {
+    .transactions-filters .search-per-page-row {
+      grid-template-columns: minmax(0, 4fr) minmax(0, 1fr);
+      gap: 10px;
+      grid-column: 1 / -1;
+    }
   }
   .transactions-filters .search-per-page-row label {
     min-width: 0;
   }
-  .transactions-filters .search-per-page-row .filter-search {
-    flex: 1 1 0;
+  .transaction-form-grid {
+    display: grid !important;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 16px;
+    width: 100%;
+    justify-items: stretch;
   }
-  .transactions-filters .search-per-page-row .transactions-per-page {
-    flex: 0 0 140px;
+  .transaction-form-grid > label,
+  .transaction-form-grid > .notes-field {
+    min-width: 0 !important;
+    width: 100%;
+  }
+  .transaction-form-grid > label {
+    align-items: flex-start;
+  }
+  .transaction-form-grid > label span {
+    line-height: 1.2;
+  }
+  .transaction-form-grid .combo-input {
+    margin-top: 0;
+  }
+  .transaction-form-grid .tx-timestamp {
+    width: 100%;
+  }
+  .transaction-form-grid .tx-timestamp .date-field {
+    width: 100%;
+  }
+  @media (min-width: 721px) {
+    .transaction-form-grid .tx-amount-row {
+      display: contents;
+    }
+    .transaction-form-grid .tx-amount-rub {
+      grid-column: 1 / 2;
+    }
+    .transaction-form-grid .tx-amount-usd {
+      grid-column: 2 / 3;
+    }
+    .transaction-form-grid .tx-notes-label {
+      grid-column: 3 / 4;
+    }
+    .transaction-form-grid .transaction-actions {
+      grid-column: 1 / -1;
+      justify-self: stretch;
+      align-self: stretch;
+    }
+    .transaction-form-grid .transaction-actions button {
+      width: 100%;
+    }
+  }
+  .tx-note-trigger,
+  .tx-note-view {
+    border: none;
+    background: transparent;
+    padding: 0;
+    font-weight: 400;
+    color: var(--text);
+    cursor: pointer;
+    text-align: left;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 120px;
+  }
+  .tx-note-trigger:hover,
+  .tx-note-view:hover {
+    background: transparent;
+    color: var(--text);
+  }
+  .tx-note-trigger.has-note,
+  .tx-note-view.has-note {
+    color: var(--primary);
+  }
+  .tx-note-input {
+    display: none;
+  }
+  .tx-notes textarea {
+    display: none;
+  }
+  .tx-note-cell {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+  }
+  .tx-notes-label {
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+  }
+  .tx-note-preview {
+    display: none;
+    font-size: 0.8rem;
+    color: var(--muted);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 220px;
+  }
+  .tx-note-preview.is-visible {
+    display: inline-block;
+  }
+  .transaction-form-grid .notes-field {
+    border: 1px solid var(--border);
+    background: #fff;
+    border-radius: 10px;
+    padding: 6px 12px;
+    height: 40px;
+    display: flex;
+    align-items: center;
+    width: 100%;
+  }
+  .transaction-form-grid .notes-field .notes-header {
+    display: flex;
+    align-items: center;
+    width: 100%;
+    min-height: 0;
+  }
+  .transaction-form-grid .notes-field .tx-note-cell {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+  }
+  .transaction-form-grid .tx-note-trigger {
+    margin-left: auto;
+  }
+  .transactions-filters {
+    align-items: flex-start;
+  }
+  .transactions-filters label {
+    align-items: flex-start;
+  }
+  .transactions-filters label span {
+    line-height: 1.2;
   }
 </style>
 <div style="display:flex; flex-wrap:wrap; justify-content:space-between; gap:12px; align-items:center;">
@@ -121,14 +339,14 @@
 
 <section class="add-transaction section-card">
   <h3 style="margin-top:0;">Add Transaction</h3>
-  <form method="post" style="display:flex; flex-wrap:wrap; gap:16px;">
+  <form method="post" class="transaction-form-grid">
     {% csrf_token %}
     {{ form.non_field_errors }}
     {% for field in form %}
       {% if field.name == "tz_offset" or field.name == "original_timestamp" or field.name == "timestamp_initial" %}
         {{ field.as_hidden }}
       {% elif field.name == "card" %}
-        <label style="display:flex; flex-direction:column; min-width:200px; flex:1;">
+        <label class="tx-card" style="display:flex; flex-direction:column; min-width:200px; flex:1;">
           <span>{{ field.label }}{% if field.field.required %} *{% endif %}</span>
           <div class="combo-wrapper">
             {{ field.as_hidden }}
@@ -140,7 +358,7 @@
           {% endif %}
         </label>
       {% elif field.name == "client" %}
-        <label style="display:flex; flex-direction:column; min-width:200px; flex:1;">
+        <label class="tx-client" style="display:flex; flex-direction:column; min-width:200px; flex:1;">
           <span>{{ field.label }}{% if field.field.required %} *{% endif %}</span>
           <div class="combo-wrapper">
             {{ field.as_hidden }}
@@ -151,23 +369,26 @@
             <small style="color:#c00;">{{ field.errors|join:", " }}</small>
           {% endif %}
         </label>
-      {% elif field.name == "notes" %}
-        {% with has_value=field.value %}
-        <div class="notes-field{% if has_value or field.errors %} is-open{% endif %}" style="flex:1 1 100%;">
-          <div class="notes-header">
+        {% elif field.name == "notes" %}
+          {% with has_value=field.value %}
+          <label class="tx-notes-label">
             <span>{{ field.label }}</span>
-            <button type="button" class="notes-trigger" data-note-target="notes-{{ field.auto_id }}">Add note</button>
-          </div>
-          <div class="notes-collapse" id="notes-{{ field.auto_id }}">
+            <div class="notes-field tx-notes{% if has_value or field.errors %} is-open{% endif %}">
+              <div class="notes-header">
+                <div class="tx-note-cell">
+                  <button type="button" class="tx-note-trigger{% if has_value %} has-note{% endif %}" data-note-input="{{ field.auto_id }}" aria-label="Edit note">{% if has_value %}i{% else %}+{% endif %}</button>
+                  <span class="tx-note-preview{% if has_value %} is-visible{% endif %}">{{ field.value|default:"" }}</span>
+                </div>
+              </div>
             {{ field }}
             {% if field.errors %}
               <small style="color:#c00;">{{ field.errors|join:", " }}</small>
             {% endif %}
-          </div>
-        </div>
-        {% endwith %}
+            </div>
+          </label>
+          {% endwith %}
       {% elif field.name == "timestamp" %}
-        <label style="display:flex; flex-direction:column; min-width:150px; flex:0.6;">
+        <label class="tx-timestamp" style="display:flex; flex-direction:column; min-width:200px; flex:1;">
           <span>{{ field.label }}{% if field.field.required %} *{% endif %}</span>
           <div class="date-field">
             {{ field }}
@@ -177,17 +398,30 @@
             <small style="color:#c00;">{{ field.errors|join:", " }}</small>
           {% endif %}
         </label>
-      {% elif field.name == "amount_rub" or field.name == "amount_usd" %}
-        <label style="display:flex; flex-direction:column; min-width:130px; flex:0.45;">
-          <span>{{ field.label }}{% if field.field.required %} *{% endif %}</span>
-          <div class="currency-input">
-            <span class="currency-prefix">{% if field.name == "amount_rub" %}&#8381;{% else %}${% endif %}</span>
-            {{ field }}
-          </div>
-          {% if field.errors %}
-            <small style="color:#c00;">{{ field.errors|join:", " }}</small>
-          {% endif %}
-        </label>
+      {% elif field.name == "amount_rub" %}
+        <div class="tx-amount-row">
+          <label class="tx-amount-rub" style="display:flex; flex-direction:column; min-width:130px; flex:0.45;">
+            <span>{{ field.label }}{% if field.field.required %} *{% endif %}</span>
+            <div class="currency-input">
+              <span class="currency-prefix">&#8381;</span>
+              {{ field }}
+            </div>
+            {% if field.errors %}
+              <small style="color:#c00;">{{ field.errors|join:", " }}</small>
+            {% endif %}
+          </label>
+      {% elif field.name == "amount_usd" %}
+          <label class="tx-amount-usd" style="display:flex; flex-direction:column; min-width:130px; flex:0.45;">
+            <span>{{ field.label }}{% if field.field.required %} *{% endif %}</span>
+            <div class="currency-input">
+              <span class="currency-prefix">$</span>
+              {{ field }}
+            </div>
+            {% if field.errors %}
+              <small style="color:#c00;">{{ field.errors|join:", " }}</small>
+            {% endif %}
+          </label>
+        </div>
       {% else %}
         <label style="display:flex; flex-direction:column; min-width:140px; flex:0.6;">
           <span>{{ field.label }}{% if field.field.required %} *{% endif %}</span>
@@ -198,8 +432,8 @@
         </label>
       {% endif %}
     {% endfor %}
-    <div style="align-self:flex-end;">
-      <button type="submit">Save</button>
+    <div class="transaction-actions">
+      <button type="submit">Add</button>
     </div>
   </form>
 </section>
@@ -230,14 +464,14 @@
       <button type="button" class="calendar-toggle" aria-label="Open calendar">&#128197;</button>
     </div>
   </label>
-  <div class="search-per-page-row">
-    <label class="filter-search" style="display:flex; flex-direction:column; min-width:200px; flex:1;">
-      <span>Search</span>
-      <input type="text" name="q" placeholder="Search client/card/notes..." value="{{ query }}">
-    </label>
-    <label class="transactions-per-page" style="display:flex; flex-direction:column; min-width:140px;">
-      <span>Per page</span>
-      <select name="per_page">
+    <div class="search-per-page-row">
+      <label class="filter-search" style="display:flex; flex-direction:column; min-width:220px; flex:1;">
+        <span>Search</span>
+        <input type="text" name="q" placeholder="Search client/card/notes..." value="{{ query }}">
+      </label>
+      <label class="transactions-per-page" style="display:flex; flex-direction:column;">
+        <span>Per page</span>
+        <select name="per_page">
         {% for option in per_page_choices %}
           <option value="{{ option }}" {% if option == per_page %}selected{% endif %}>{{ option }}</option>
         {% endfor %}
@@ -249,17 +483,22 @@
 <div class="table-card table-scroll mobile-cards">
 <table class="transactions-table">
   <thead>
-    <tr><th>Time</th><th>Client</th><th>RUB &#8381;</th><th>USD $</th><th>Card</th><th>Rate &#8381;</th><th>Actions</th></tr>
+    <tr><th>Time</th><th>Client</th><th>RUB &#8381;</th><th>USD $</th><th>Card</th><th>Rate &#8381;</th><th>Note</th><th>Actions</th></tr>
   </thead>
   <tbody>
-    {% for t in page_obj %}
-      <tr>
+      {% for t in page_obj %}
+        <tr class="{% if not t.notes %}tx-no-note{% endif %}">
         <td data-label="Time" data-utc="{{ t.timestamp|date:'c' }}"></td>
         <td data-label="Client">{{ t.client.name }}</td>
         <td data-label="RUB &#8381;">{{ t.amount_rub|spaced_number }} &#8381;</td>
         <td data-label="USD $">{{ t.amount_usd|spaced_number }} $</td>
         <td data-label="Card">{{ t.card_display }}</td>
         <td data-label="Rate &#8381;">{{ t.rate|spaced_number }} &#8381;</td>
+          <td data-label="Note" class="{% if not t.notes %}tx-note-empty{% endif %}">
+            {% if t.notes %}
+              <button type="button" class="tx-note-view has-note" data-note="{{ t.notes|escape }}" data-tx-id="{{ t.id }}">{{ t.notes }}</button>
+            {% endif %}
+          </td>
         <td data-label="Actions">
           <a href="/transactions/{{ t.id }}/edit/">Edit</a>
           <form method="post" action="{% url 'transaction_delete' t.id %}" style="display:inline;" onsubmit="return confirm('Delete this transaction?');">
@@ -270,7 +509,7 @@
         </td>
       </tr>
     {% empty %}
-      <tr><td colspan="7">No transactions match the selected filters.</td></tr>
+      <tr><td colspan="8">No transactions match the selected filters.</td></tr>
     {% endfor %}
   </tbody>
 </table>
@@ -444,7 +683,7 @@
 
     function renderRows(items) {
       if (!items.length) {
-        tbody.innerHTML = "<tr><td colspan=\"7\">No transactions match the search.</td></tr>";
+        tbody.innerHTML = "<tr><td colspan=\"8\">No transactions match the search.</td></tr>";
         return;
       }
       const csrf = getCookie("csrftoken");
@@ -457,15 +696,20 @@
           const rub = escapeHtml(tx.rub);
           const usd = escapeHtml(tx.usd);
           const rate = escapeHtml(tx.rate);
+          const note = escapeHtml(tx.note);
           const timeIso = escapeHtml(tx.time_iso);
-          return `
-            <tr>
+            const noteClass = note ? "" : " tx-no-note";
+            return `
+              <tr class="${noteClass.trim()}">
               <td data-label="Time" data-utc="${timeIso}"></td>
               <td data-label="Client">${client}</td>
               <td data-label="RUB &#8381;">${rub} &#8381;</td>
               <td data-label="USD $">${usd} $</td>
               <td data-label="Card">${card}</td>
               <td data-label="Rate &#8381;">${rate} &#8381;</td>
+                <td data-label="Note" class="${note ? "" : "tx-note-empty"}">
+                  ${note ? `<button type="button" class="tx-note-view has-note" data-note="${note}" data-tx-id="${id}">${note}</button>` : ""}
+                </td>
               <td data-label="Actions">
                 <a href="/transactions/${id}/edit/">Edit</a>
                 <form method="post" action="/transactions/${id}/delete/" style="display:inline;" onsubmit="return confirm('Delete this transaction?');">
@@ -582,9 +826,212 @@
 </script>
 <script>
   (function () {
+    const addForm = document.querySelector("form.transaction-form-grid");
+    const rubInput = addForm?.querySelector('input[name="amount_rub"]');
+    const usdInput = addForm?.querySelector('input[name="amount_usd"]');
+
+    function normalizeNumberString(value) {
+      if (value === undefined || value === null) return "";
+      return String(value).replace(/\s+/g, "").replace(",", ".");
+    }
+
+    function parseNumber(value) {
+      if (value === undefined || value === null) return null;
+      const normalized = normalizeNumberString(value);
+      if (!normalized || normalized === "-" || normalized === ".") return null;
+      const parsed = parseFloat(normalized);
+      return Number.isFinite(parsed) ? parsed : null;
+    }
+
+    function formatNumber(value) {
+      const rounded = Math.round((value + Number.EPSILON) * 100) / 100;
+      let [intPart, fracPart] = rounded.toFixed(2).split(".");
+      const sign = intPart.startsWith("-") ? "-" : "";
+      intPart = intPart.replace("-", "");
+      intPart = intPart.replace(/\B(?=(\d{3})+(?!\d))/g, " ");
+      fracPart = fracPart.replace(/0+$/, "");
+      const formattedInt = `${sign}${intPart || "0"}`;
+      return fracPart ? `${formattedInt}.${fracPart}` : formattedInt;
+    }
+
+    function applyFormat(input) {
+      if (!input) return;
+      const parsed = parseNumber(input.value);
+      if (parsed === null) return;
+      input.value = formatNumber(parsed);
+    }
+
+    [rubInput, usdInput].forEach(input => {
+      if (!input) return;
+      if (input.value) {
+        applyFormat(input);
+      }
+      input.addEventListener("input", () => {
+        if (!input.value) return;
+        applyFormat(input);
+      });
+      input.addEventListener("blur", () => {
+        if (!input.value) return;
+        applyFormat(input);
+      });
+    });
+
+    if (addForm) {
+      addForm.addEventListener("submit", () => {
+        if (rubInput) rubInput.value = normalizeNumberString(rubInput.value);
+        if (usdInput) usdInput.value = normalizeNumberString(usdInput.value);
+      });
+    }
+  })();
+</script>
+<script>
+  (function () {
     const offset = new Date().getTimezoneOffset();
     document.querySelectorAll(".js-tz-offset").forEach(input => {
       input.value = offset;
+    });
+  })();
+</script>
+<div class="note-modal" id="tx-note-modal">
+  <div class="note-modal-content">
+    <h3>Note</h3>
+    <textarea id="tx-note-text" rows="5" placeholder="Type note..."></textarea>
+    <div class="note-modal-actions">
+      <div></div>
+      <div class="note-modal-actions-right">
+        <button type="button" data-tx-note-action="cancel">Cancel</button>
+        <button type="button" data-tx-note-action="save" class="primary">Save</button>
+      </div>
+    </div>
+  </div>
+</div>
+  <script>
+  (function () {
+    const modal = document.getElementById("tx-note-modal");
+    const textarea = document.getElementById("tx-note-text");
+    const saveBtn = modal?.querySelector("[data-tx-note-action='save']");
+    const cancelBtn = modal?.querySelector("[data-tx-note-action='cancel']");
+    let activeInput = null;
+    let activePreview = null;
+    let activeNoteButton = null;
+    let activeNoteId = null;
+    function getCookieValue(name) {
+      const match = document.cookie.match(new RegExp("(^|;\\s*)" + name + "=([^;]*)"));
+      return match ? decodeURIComponent(match[2]) : "";
+    }
+
+    function openModal(input, readOnly, initialValue) {
+      if (!modal || !textarea) return;
+      activeInput = readOnly ? null : input;
+      activePreview = null;
+      if (typeof initialValue === "string") {
+        textarea.value = initialValue;
+      } else {
+        textarea.value = input ? input.value : "";
+      }
+      textarea.readOnly = Boolean(readOnly);
+      if (saveBtn) {
+        saveBtn.style.display = readOnly ? "none" : "";
+      }
+      modal.classList.add("is-open");
+      textarea.focus();
+    }
+
+    function closeModal() {
+      modal?.classList.remove("is-open");
+      activeInput = null;
+      activePreview = null;
+      activeNoteButton = null;
+      activeNoteId = null;
+    }
+
+      document.addEventListener("click", (e) => {
+        const trigger = e.target.closest(".tx-note-trigger");
+        const viewer = e.target.closest(".tx-note-view");
+        if (trigger) {
+          const inputId = trigger.getAttribute("data-note-input");
+          const input = inputId ? document.getElementById(inputId) : null;
+          activePreview = trigger.closest(".tx-note-cell")?.querySelector(".tx-note-preview");
+          activeNoteButton = null;
+          activeNoteId = null;
+          openModal(input, false);
+          return;
+        }
+        if (viewer) {
+          const note = viewer.getAttribute("data-note") || "";
+          activeNoteButton = viewer;
+          activeNoteId = viewer.getAttribute("data-tx-id");
+          activeInput = null;
+          openModal(null, false, note);
+          return;
+        }
+      });
+
+    saveBtn?.addEventListener("click", () => {
+      if (!textarea) return;
+      const nextValue = textarea.value.trim();
+        if (activeInput) {
+          activeInput.value = nextValue;
+          const trigger = document.querySelector(`.tx-note-trigger[data-note-input='${activeInput.id}']`);
+          if (trigger) {
+            trigger.classList.toggle("has-note", Boolean(activeInput.value));
+            trigger.textContent = activeInput.value ? "i" : "+";
+          }
+          if (activePreview) {
+            activePreview.textContent = activeInput.value;
+            activePreview.classList.toggle("is-visible", Boolean(activeInput.value));
+          }
+          closeModal();
+          return;
+        }
+      if (activeNoteButton && activeNoteId) {
+        const csrf = document.querySelector("input[name='csrfmiddlewaretoken']")?.value || getCookieValue("csrftoken");
+        fetch(`/transactions/${activeNoteId}/note/`, {
+          method: "POST",
+          credentials: "same-origin",
+          headers: {
+            "Content-Type": "application/json",
+            "X-CSRFToken": csrf || "",
+          },
+          body: JSON.stringify({ note: nextValue }),
+        })
+          .then((res) => res.ok ? res.json() : Promise.reject(res))
+          .then((data) => {
+            if (!data || !data.ok) return;
+            const noteCell = activeNoteButton.closest("td");
+            const noteRow = activeNoteButton.closest("tr");
+            if (!nextValue) {
+              activeNoteButton.remove();
+              if (noteCell) {
+                noteCell.classList.add("tx-note-empty");
+              }
+              if (noteRow) {
+                noteRow.classList.add("tx-no-note");
+              }
+            } else {
+              activeNoteButton.textContent = nextValue;
+              activeNoteButton.setAttribute("data-note", nextValue);
+              if (noteCell) {
+                noteCell.classList.remove("tx-note-empty");
+              }
+              if (noteRow) {
+                noteRow.classList.remove("tx-no-note");
+              }
+            }
+            closeModal();
+          })
+          .catch(() => {
+            alert("Failed to save note.");
+          });
+      }
+    });
+
+    cancelBtn?.addEventListener("click", () => closeModal());
+    modal?.addEventListener("click", (e) => {
+      if (e.target === modal) closeModal();
+    });
+    document.addEventListener("keydown", (e) => {
+      if (e.key === "Escape" && modal?.classList.contains("is-open")) closeModal();
     });
   })();
 </script>

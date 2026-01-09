@@ -1,13 +1,92 @@
 {% extends "core/base.html" %}
 {% load formatting %}
 {% block content %}
+<style>
+  .payments-table {
+    width: 100%;
+    min-width: 0 !important;
+  }
+  .payments-filters .search-per-page-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 140px);
+    gap: 12px;
+    align-items: end;
+    width: 100%;
+  }
+  .payments-filters .search-per-page-row .filter-search,
+  .payments-filters .search-per-page-row .payments-per-page {
+    min-width: 0;
+  }
+  @media (max-width: 720px) {
+    html,
+    body {
+      overflow-x: hidden;
+    }
+    .table-card.table-scroll {
+      overflow-x: hidden;
+    }
+    .payments-filters {
+      display: grid !important;
+      grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+      gap: 10px 12px;
+    }
+    .payments-filters .search-per-page-row {
+      grid-template-columns: minmax(0, 4fr) minmax(0, 1fr);
+      gap: 10px;
+      grid-column: 1 / -1;
+    }
+    .payments-filters label {
+      min-width: 0;
+    }
+    .payments-filters .search-per-page-row input,
+    .payments-filters .search-per-page-row select {
+      min-height: 44px;
+    }
+    .payments-table {
+      width: 100%;
+      min-width: 0 !important;
+      table-layout: fixed;
+    }
+    .payments-table thead {
+      display: none;
+    }
+    .payments-table tbody {
+      display: block;
+      width: 100%;
+    }
+    .payments-table tr {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      grid-template-areas:
+        "date client"
+        "rub usd";
+      gap: 6px 12px;
+      width: 100%;
+      padding: 12px;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      background: #fff;
+      margin-bottom: 12px;
+    }
+    .payments-table td {
+      display: block;
+      padding: 6px 0;
+      border: none;
+      min-width: 0;
+    }
+    .payments-table td:nth-child(1) { grid-area: date; font-weight: 600; }
+    .payments-table td:nth-child(2) { grid-area: client; font-weight: 600; }
+    .payments-table td:nth-child(3) { grid-area: rub; color: var(--muted); font-size: 0.9rem; }
+    .payments-table td:nth-child(4) { grid-area: usd; color: var(--muted); font-size: 0.9rem; }
+  }
+</style>
 <section class="section-card">
   <div style="display:flex; flex-direction:column; gap:12px;">
     <div style="display:flex; flex-wrap:wrap; justify-content:space-between; gap:12px; align-items:center;">
       <h2 style="margin:0;">Payments Summary</h2>
-      <a href="/payments/export/{% if start or end or query %}?{% endif %}{% if start %}start={{ start|urlencode }}{% if end or query %}&{% endif %}{% endif %}{% if end %}end={{ end|urlencode }}{% if query %}&{% endif %}{% endif %}{% if query %}q={{ query|urlencode }}{% endif %}">Export CSV</a>
+      <a href="/payments/export/{% if start or end or query %}?{% endif %}{% if start %}start={{ start|urlencode }}{% if end or query %}&{% endif %}{% endif %}{% if end %}end={{ end|urlencode }}{% if query %}&{% endif %}{% endif %}{% if query %}q={{ query|urlencode }}{% endif %}" data-initial="/payments/export/{% if start or end or query %}?{% endif %}{% if start %}start={{ start|urlencode }}{% if end or query %}&{% endif %}{% endif %}{% if end %}end={{ end|urlencode }}{% if query %}&{% endif %}{% endif %}{% if query %}q={{ query|urlencode }}{% endif %}">Export CSV</a>
     </div>
-    <form method="get" style="display:flex; gap:12px; flex-wrap:wrap; align-items:flex-end; width:100%;">
+    <form method="get" class="payments-filters" style="display:flex; gap:12px; flex-wrap:wrap; align-items:flex-end; width:100%;">
       <label style="display:flex; flex-direction:column;">
         <span>From</span>
         <div class="date-field">
@@ -22,15 +101,25 @@
           <button type="button" class="calendar-toggle" aria-label="Open calendar">&#128197;</button>
         </div>
       </label>
-      <label style="display:flex; flex-direction:column; min-width:220px; flex:1;">
-        <span>Search</span>
-        <input type="text" name="q" placeholder="Search client..." value="{{ query }}">
-      </label>
+      <div class="search-per-page-row">
+        <label class="filter-search" style="display:flex; flex-direction:column; min-width:220px; flex:1;">
+          <span>Search</span>
+          <input type="text" name="q" placeholder="Search client..." value="{{ query }}">
+        </label>
+        <label class="payments-per-page" style="display:flex; flex-direction:column;">
+          <span>Per page</span>
+          <select name="per_page">
+            {% for option in per_page_choices %}
+              <option value="{{ option }}" {% if option == per_page %}selected{% endif %}>{{ option }}</option>
+            {% endfor %}
+          </select>
+        </label>
+      </div>
     </form>
   </div>
 
   <div class="table-card table-scroll mobile-cards" style="margin-top:16px;">
-    <table>
+    <table class="payments-table">
       <thead>
         <tr>
           <th>Date</th>
@@ -53,14 +142,42 @@
       </tbody>
     </table>
   </div>
+
+  {% if page_obj and page_obj.has_other_pages %}
+    <div class="pagination" style="margin-top:16px; display:flex; gap:8px; flex-wrap:wrap; align-items:center;">
+      {% if page_obj.has_previous %}
+        <a href="?{% if start %}start={{ start|urlencode }}&{% endif %}{% if end %}end={{ end|urlencode }}&{% endif %}{% if query %}q={{ query|urlencode }}&{% endif %}per_page={{ per_page }}&page={{ page_obj.previous_page_number }}">Prev</a>
+      {% endif %}
+      {% for num in page_items %}
+        {% if num %}
+          {% if num == page_obj.number %}
+            <span style="padding:4px 8px; border-radius:8px; background:#e2e8f0; font-weight:600;">{{ num }}</span>
+          {% else %}
+            <a href="?{% if start %}start={{ start|urlencode }}&{% endif %}{% if end %}end={{ end|urlencode }}&{% endif %}{% if query %}q={{ query|urlencode }}&{% endif %}per_page={{ per_page }}&page={{ num }}" style="padding:4px 8px;">{{ num }}</a>
+          {% endif %}
+        {% else %}
+          <span style="padding:4px 6px; color:var(--muted);">...</span>
+        {% endif %}
+      {% endfor %}
+      {% if page_obj.has_next %}
+        <a href="?{% if start %}start={{ start|urlencode }}&{% endif %}{% if end %}end={{ end|urlencode }}&{% endif %}{% if query %}q={{ query|urlencode }}&{% endif %}per_page={{ per_page }}&page={{ page_obj.next_page_number }}">Next</a>
+      {% endif %}
+    </div>
+  {% endif %}
 </section>
 <script>
   (function () {
     const searchInput = document.querySelector("input[name='q']");
     const tbody = document.querySelector(".table-card table tbody");
+    const pagination = document.querySelector(".pagination");
+    const perPageLabel = document.querySelector(".payments-per-page");
+    const perPageSelect = document.querySelector("select[name='per_page']");
+    const exportLink = document.querySelector("a[href^='/payments/export/']");
     if (!searchInput || !tbody) return;
 
     const initialBody = tbody.innerHTML;
+    const initialPagination = pagination ? pagination.innerHTML : "";
+    const initialPaginationDisplay = pagination ? pagination.style.display : "";
     let controller = null;
     let timer;
 
@@ -89,6 +206,12 @@
       return params;
     }
 
+    function updateExportLink(queryParams) {
+      if (!exportLink) return;
+      const query = queryParams.toString();
+      exportLink.href = query ? `/payments/export/?${query}` : "/payments/export/";
+    }
+
     function renderRows(items) {
       if (!items.length) {
         tbody.innerHTML = "<tr><td colspan=\"4\">No payments found for the selected range.</td></tr>";
@@ -114,6 +237,20 @@
 
     function restoreInitial() {
       tbody.innerHTML = initialBody;
+      if (pagination) pagination.innerHTML = initialPagination;
+      if (exportLink) exportLink.href = exportLink.dataset.initial || exportLink.href;
+      togglePagination(true);
+      togglePerPage(true);
+    }
+
+    function togglePagination(show) {
+      if (!pagination) return;
+      pagination.style.display = show ? initialPaginationDisplay || "" : "none";
+    }
+
+    function togglePerPage(show) {
+      if (!perPageLabel) return;
+      perPageLabel.style.display = show ? "" : "none";
     }
 
     function applyFilters() {
@@ -121,10 +258,13 @@
       const end = getValue("input[name='end']");
       const term = searchInput.value.trim();
       const hasFilters = Boolean(start || end || term);
+      updateExportLink(buildParams(hasFilters));
       if (!hasFilters) {
         restoreInitial();
         return;
       }
+      togglePagination(false);
+      togglePerPage(false);
       if (controller) controller.abort();
       controller = new AbortController();
       const params = buildParams(true);
@@ -167,6 +307,15 @@
         setTimeout(applyFilters, 0);
       }
     });
+    if (perPageSelect) {
+      perPageSelect.addEventListener("change", () => {
+        const params = buildParams(true);
+        params.set("per_page", perPageSelect.value);
+        params.delete("page");
+        const query = params.toString();
+        window.location.href = query ? `${window.location.pathname}?${query}` : window.location.pathname;
+      });
+    }
     applyFilters();
   })();
 </script>

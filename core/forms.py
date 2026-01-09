@@ -193,6 +193,9 @@ class TransactionForm(forms.ModelForm):
         self.order_fields(["timestamp", "client", "card", "amount_rub", "amount_usd", "notes"])
         if not self.is_bound:
             self.fields["timestamp"].widget.attrs["data-utc"] = "1"
+            if not self.instance.pk:
+                self.initial["amount_rub"] = ""
+                self.initial["amount_usd"] = ""
             if self.instance.pk and self.instance.timestamp:
                 display = self.instance.timestamp
                 if timezone.is_aware(display):

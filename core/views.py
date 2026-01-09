@@ -2,6 +2,7 @@ from datetime import date, timedelta, datetime, time, timezone as dt_timezone
 from decimal import Decimal, ROUND_DOWN, InvalidOperation
 from collections import defaultdict
 import csv
+import json
 
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
@@ -1079,6 +1080,7 @@ def transactions_search(request):
                 "rub": _format_spaced_number(tx.amount_rub),
                 "usd": _format_spaced_number(tx.amount_usd),
                 "rate": _format_spaced_number(tx.rate),
+                "note": tx.notes or "",
             }
         )
     payload = {"results": data}
@@ -1238,6 +1240,24 @@ def transaction_delete(request, pk: int):
 
 
 @login_required
+@require_POST
+def transaction_update_note(request, pk: int):
+    tx = get_object_or_404(Transaction, pk=pk)
+    note = ""
+    if request.content_type == "application/json":
+        try:
+            payload = json.loads(request.body.decode("utf-8") or "{}")
+            note = payload.get("note", "") or ""
+        except json.JSONDecodeError:
+            return JsonResponse({"ok": False, "error": "Invalid JSON"}, status=400)
+    else:
+        note = request.POST.get("note") or ""
+    tx.notes = note
+    tx.save(update_fields=["notes"])
+    return JsonResponse({"ok": True})
+
+
+@login_required
 def card_history(request, pk: int):
     card = get_object_or_404(Card, pk=pk)
 
@@ -1393,11 +1413,24 @@ def payments_summary(request):
 
     query = (request.GET.get("q") or "").strip()
     rows = _payments_rows(start_date, end_date, query)
+    per_page = _parse_per_page(request.GET.get("per_page"), default=50)
+    paginator = Paginator(rows, per_page)
+    page_number = request.GET.get("page")
+    page_obj = paginator.get_page(page_number)
 
     return render(
         request,
         "core/payments_summary.html",
-        {"rows": rows, "start": start_raw, "end": end_raw, "query": query},
+        {
+            "rows": page_obj,
+            "page_obj": page_obj,
+            "page_items": _pagination_items(page_obj),
+            "per_page": per_page,
+            "per_page_choices": PER_PAGE_CHOICES,
+            "start": start_raw,
+            "end": end_raw,
+            "query": query,
+        },
     )
 
 @login_required
@@ -1408,6 +1441,17 @@ def payments_search(request):
     end_date = _parse_user_date(end_raw)
     query = (request.GET.get("q") or "").strip()
     rows = _payments_rows(start_date, end_date, query)
+    page = request.GET.get("page")
+    per_page = request.GET.get("per_page")
+    if page or per_page:
+        per_page_value = _parse_per_page(per_page, default=50)
+        paginator = Paginator(rows, per_page_value)
+        page_obj = paginator.get_page(page)
+        rows = page_obj
+    else:
+        paginator = None
+        page_obj = None
+
     data = []
     for row in rows:
         data.append(
@@ -1418,7 +1462,12 @@ def payments_search(request):
                 "usd": _format_spaced_number(row["usd"]),
             }
         )
-    return JsonResponse({"results": data})
+    payload = {"results": data}
+    if paginator and page_obj:
+        payload.update(_pagination_meta(paginator, page_obj))
+    else:
+        payload.update({"total": len(data), "pages": 1, "page": 1, "per_page": len(data)})
+    return JsonResponse(payload)
 
 @login_required
 def payments_export(request):

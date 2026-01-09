@@ -1,27 +1,172 @@
 {% extends "core/base.html" %}
 {% load formatting %}
 {% block content %}
+<style>
+  .add-card-toggle {
+    display: none;
+    align-items: center;
+    gap: 8px;
+    background: transparent;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 8px 12px;
+    font-weight: 600;
+    cursor: pointer;
+  }
+  .add-card-toggle:focus {
+    outline: none;
+    border-color: var(--text);
+  }
+  .add-card-body {
+    width: 100%;
+  }
+  @media (max-width: 720px) {
+    .add-card-toggle {
+      display: flex;
+    }
+    .add-card-body {
+      display: none;
+    }
+    .add-card-body.is-open {
+      display: block;
+      margin-top: 12px;
+    }
+    .cards-filters {
+      display: grid !important;
+      grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+      gap: 10px 12px;
+    }
+    .cards-filters label {
+      min-width: 0 !important;
+    }
+    .cards-table {
+      width: 100%;
+      min-width: 0;
+      table-layout: fixed;
+    }
+    .cards-table thead {
+      display: none;
+    }
+    .cards-table tbody {
+      display: block;
+      width: 100%;
+    }
+    .cards-table tr {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      grid-template-areas:
+        "name name"
+        "bank group"
+        "number pin"
+        "received withdrawn"
+        "commission balance"
+        "actions actions";
+      gap: 6px 12px;
+      width: 100%;
+      padding: 12px;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      background: #fff;
+      margin-bottom: 12px;
+    }
+    .cards-table td {
+      display: block;
+      padding: 6px 0;
+      border: none;
+      min-width: 0;
+    }
+    .cards-table td:nth-child(4) {
+      padding-right: 12px;
+    }
+    .cards-table td:nth-child(5) {
+      padding-left: 12px;
+    }
+    .cards-table td::before {
+      content: attr(data-label);
+      display: block;
+      font-size: 0.7rem;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      color: var(--muted);
+      margin-bottom: 4px;
+    }
+    .cards-table td:nth-child(1) { grid-area: name; font-weight: 600; }
+    .cards-table td:nth-child(2) { grid-area: bank; color: var(--muted); font-size: 0.9rem; }
+    .cards-table td:nth-child(3) { grid-area: group; color: var(--muted); font-size: 0.9rem; }
+    .cards-table td:nth-child(4) { grid-area: number; }
+    .cards-table td:nth-child(5) { grid-area: pin; }
+    .cards-table td:nth-child(6) { grid-area: received; color: var(--muted); font-size: 0.9rem; }
+    .cards-table td:nth-child(7) { grid-area: withdrawn; color: var(--muted); font-size: 0.9rem; }
+    .cards-table td:nth-child(8) { grid-area: commission; color: var(--muted); font-size: 0.9rem; }
+    .cards-table td:nth-child(9) { grid-area: balance; color: var(--muted); font-size: 0.9rem; }
+    .cards-table td:nth-child(10) { grid-area: actions; }
+    .cards-table td:nth-child(3),
+    .cards-table td:nth-child(5),
+    .cards-table td:nth-child(7),
+    .cards-table td:nth-child(9) {
+      text-align: right;
+    }
+    .cards-table td:nth-child(3)::before,
+    .cards-table td:nth-child(5)::before,
+    .cards-table td:nth-child(7)::before,
+    .cards-table td:nth-child(9)::before {
+      text-align: right;
+    }
+    .cards-table td:nth-child(10)::before {
+      content: "";
+      margin-bottom: 0;
+    }
+  }
+  .add-card-body .card-notes-field {
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+  }
+  .add-card-body .card-notes-field > span {
+    margin-bottom: 0;
+  }
+  .add-card-body .card-notes-field .notes-field {
+    border: 1px solid var(--border);
+    background: #fff;
+    min-height: 44px;
+    padding: 10px 12px;
+    gap: 0;
+  }
+  .add-card-body .card-notes-field .notes-header {
+    justify-content: flex-end;
+  }
+  .add-card-body .card-notes-field .notes-trigger,
+  .add-card-body .card-notes-field .notes-trigger:hover {
+    background: transparent;
+    color: var(--primary);
+  }
+</style>
 <section class="section-card">
-  <h2 style="margin-top:0;">Add Card</h2>
-  <form method="post" class="form-grid">
-    {% csrf_token %}
-    {{ form.non_field_errors }}
-    {% for field in form %}
-      {% if field.name == "notes" %}
-        {% with has_value=field.value %}
-        <div class="notes-field{% if has_value or field.errors %} is-open{% endif %}" style="grid-column:1/-1;">
-          <div class="notes-header">
-            <span>{{ field.label }}</span>
-            <button type="button" class="notes-trigger" data-note-target="notes-{{ field.auto_id }}">Add note</button>
+  <div class="add-card-toggle" role="button" tabindex="0" aria-expanded="{% if form.errors %}true{% else %}false{% endif %}">
+    <h2 style="margin:0;">Add Card</h2>
+  </div>
+    <div class="add-card-body{% if form.errors %} is-open{% endif %}">
+      <form method="post" class="form-grid cards-add-form">
+        {% csrf_token %}
+        {{ form.non_field_errors }}
+        {% for field in form %}
+        {% if field.name == "notes" %}
+          {% with has_value=field.value %}
+        <label class="card-notes-field">
+          <span>{{ field.label }}</span>
+          <div class="notes-field{% if has_value or field.errors %} is-open{% endif %}">
+            <div class="notes-header">
+              <button type="button" class="notes-trigger" data-note-target="notes-{{ field.auto_id }}">Add note</button>
+            </div>
+            <div class="notes-collapse" id="notes-{{ field.auto_id }}">
+              {{ field }}
+              {% if field.errors %}
+                <small style="color:#c00;">{{ field.errors|join:", " }}</small>
+              {% endif %}
+            </div>
           </div>
-          <div class="notes-collapse" id="notes-{{ field.auto_id }}">
-            {{ field }}
-            {% if field.errors %}
-              <small style="color:#c00;">{{ field.errors|join:", " }}</small>
-            {% endif %}
-          </div>
-        </div>
-        {% endwith %}
+        </label>
+          {% endwith %}
       {% elif field.name == "group_name" %}
         <label>
           <span>{{ field.label }}{% if field.field.required %} *{% endif %}</span>
@@ -54,10 +199,11 @@
         </label>
       {% endif %}
     {% endfor %}
-    <div style="grid-column:1/-1; display:flex; justify-content:flex-end;">
-      <button type="submit">Save Card</button>
-    </div>
-  </form>
+      <div style="grid-column:1/-1;">
+        <button type="submit" style="width:100%;">Add Card</button>
+      </div>
+    </form>
+  </div>
 </section>
 
 <datalist id="group-options">
@@ -78,7 +224,7 @@
       <h2 style="margin:0;">Cards</h2>
       <a href="/cards/export/{% if bank_filter or group_filter or start or end or query %}?{% endif %}{% if bank_filter %}bank={{ bank_filter|urlencode }}{% if group_filter or start or end or query %}&{% endif %}{% endif %}{% if group_filter %}group={{ group_filter|urlencode }}{% if start or end or query %}&{% endif %}{% endif %}{% if start %}start={{ start|urlencode }}{% if end or query %}&{% endif %}{% endif %}{% if end %}end={{ end|urlencode }}{% if query %}&{% endif %}{% endif %}{% if query %}q={{ query|urlencode }}{% endif %}">Export CSV</a>
     </div>
-    <form method="get" style="display:flex; gap:12px; flex-wrap:wrap; align-items:flex-end; width:100%;">
+    <form method="get" class="cards-filters" style="display:flex; gap:12px; flex-wrap:wrap; align-items:flex-end; width:100%;">
       <label style="display:flex; flex-direction:column; min-width:200px;">
         <span>Bank</span>
         <div class="combo-wrapper" data-combo-list="bank-options" data-combo-target="cards-bank-filter">
@@ -135,15 +281,15 @@
       <tbody>
         {% for c in page_obj %}
           <tr>
-            <td>{{ c.name }}</td>
-            <td>{{ c.bank }}</td>
-            <td>{% if c.group %}{{ c.group.name }}{% else %}-{% endif %}</td>
-            <td>{{ c.card_number }}</td>
-            <td>{{ c.pin }}</td>
-            <td class="num">{{ c.received_total|spaced_number }} ₽</td>
-            <td class="num">{{ c.withdrawn_total|spaced_number }} ₽</td>
-            <td class="num">{{ c.commission_total|spaced_number }} ₽</td>
-            <td class="num">{{ c.balance_total|spaced_number }} ₽</td>
+            <td data-label="Name">{{ c.name }}</td>
+            <td data-label="Bank">{{ c.bank }}</td>
+            <td data-label="Group">{% if c.group %}{{ c.group.name }}{% else %}-{% endif %}</td>
+            <td data-label="Number">{{ c.card_number }}</td>
+            <td data-label="PIN">{{ c.pin }}</td>
+            <td data-label="Received" class="num">{{ c.received_total|spaced_number }} ₽</td>
+            <td data-label="Withdrawn" class="num">{{ c.withdrawn_total|spaced_number }} ₽</td>
+            <td data-label="Commission" class="num">{{ c.commission_total|spaced_number }} ₽</td>
+            <td data-label="Balance" class="num">{{ c.balance_total|spaced_number }} ₽</td>
             <td style="display:flex; gap:6px; flex-wrap:wrap; align-items:center;">
               <a href="/cards/{{ c.id }}/edit/">Edit</a>
               <a href="/cards/{{ c.id }}/history/?start={{ start|urlencode }}&end={{ end|urlencode }}">History</a>
@@ -297,15 +443,15 @@
           const balance = escapeHtml(card.balance);
           return `
             <tr>
-              <td>${name}</td>
-              <td>${bank}</td>
-              <td>${group || "-"}</td>
-              <td>${number}</td>
-              <td>${pin}</td>
-              <td class="num">${received} ₽</td>
-              <td class="num">${withdrawn} ₽</td>
-              <td class="num">${commission} ₽</td>
-              <td class="num">${balance} ₽</td>
+              <td data-label="Name">${name}</td>
+              <td data-label="Bank">${bank}</td>
+              <td data-label="Group">${group || "-"}</td>
+              <td data-label="Number">${number}</td>
+              <td data-label="PIN">${pin}</td>
+              <td data-label="Received" class="num">${received} ₽</td>
+              <td data-label="Withdrawn" class="num">${withdrawn} ₽</td>
+              <td data-label="Commission" class="num">${commission} ₽</td>
+              <td data-label="Balance" class="num">${balance} ₽</td>
               <td style="display:flex; gap:6px; flex-wrap:wrap; align-items:center;">
                 <a href="/cards/${id}/edit/">Edit</a>
                 <a href="/cards/${id}/history/${historySuffix}">History</a>
@@ -389,6 +535,24 @@
       }
     });
     applySearch();
+  })();
+</script>
+<script>
+  (function () {
+    const toggle = document.querySelector(".add-card-toggle");
+    const body = document.querySelector(".add-card-body");
+    if (!toggle || !body) return;
+    function toggleBody() {
+      const isOpen = body.classList.toggle("is-open");
+      toggle.setAttribute("aria-expanded", isOpen ? "true" : "false");
+    }
+    toggle.addEventListener("click", toggleBody);
+    toggle.addEventListener("keydown", (e) => {
+      if (e.key === "Enter" || e.key === " ") {
+        e.preventDefault();
+        toggleBody();
+      }
+    });
   })();
 </script>
 {% endblock %}

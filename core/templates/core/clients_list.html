@@ -1,26 +1,136 @@
 {% extends "core/base.html" %}
 {% block content %}
+<style>
+  .add-client-toggle {
+    display: none;
+    align-items: center;
+    gap: 8px;
+    background: transparent;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 8px 12px;
+    font-weight: 600;
+    cursor: pointer;
+  }
+  .add-client-toggle:focus {
+    outline: none;
+    border-color: var(--text);
+  }
+  .add-client-body {
+    width: 100%;
+  }
+  .clients-controls {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 140px);
+    gap: 12px;
+    align-items: end;
+  }
+  .clients-controls .clients-search,
+  .clients-controls .clients-per-page {
+    min-width: 0;
+  }
+  @media (max-width: 720px) {
+    .add-client-toggle {
+      display: flex;
+    }
+    .add-client-body {
+      display: none;
+    }
+    .add-client-body.is-open {
+      display: block;
+      margin-top: 12px;
+    }
+    .clients-controls {
+      grid-template-columns: minmax(0, 4fr) minmax(0, 1fr);
+    }
+  }
+  @media (max-width: 720px) {
+    .clients-table {
+      width: 100%;
+      min-width: 0;
+      table-layout: fixed;
+    }
+    .clients-table thead {
+      display: none;
+    }
+    .clients-table tbody {
+      display: block;
+      width: 100%;
+    }
+    .clients-table tr {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      grid-template-areas:
+        "name status"
+        "actions actions";
+      gap: 6px 12px;
+      width: 100%;
+      padding: 12px;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      background: #fff;
+      margin-bottom: 12px;
+    }
+    .clients-table td {
+      display: block;
+      padding: 6px 0;
+      border: none;
+      min-width: 0;
+    }
+    .clients-table td:nth-child(1) { grid-area: name; font-weight: 600; }
+    .clients-table td:nth-child(2) { grid-area: status; color: var(--muted); font-size: 0.9rem; }
+    .clients-table td:nth-child(3) { grid-area: actions; }
+  }
+  .add-client-body .client-notes-field {
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+  }
+  .add-client-body .client-notes-field > span {
+    margin-bottom: 0;
+  }
+  .add-client-body .client-notes-field .notes-field {
+    border: 1px solid var(--border);
+    background: #fff;
+    min-height: 44px;
+    padding: 10px 12px;
+    gap: 0;
+  }
+  .add-client-body .client-notes-field .notes-header {
+    justify-content: flex-end;
+  }
+  .add-client-body .client-notes-field .notes-trigger,
+  .add-client-body .client-notes-field .notes-trigger:hover {
+    background: transparent;
+    color: var(--primary);
+  }
+</style>
 <section class="section-card">
-  <h2 style="margin-top:0;">Add Client</h2>
-  <form method="post" class="form-grid">
-    {% csrf_token %}
-    {{ form.non_field_errors }}
-    {% for field in form %}
-      {% if field.name == "notes" %}
-        {% with has_value=field.value %}
-        <div class="notes-field{% if has_value or field.errors %} is-open{% endif %}" style="grid-column:1/-1;">
-          <div class="notes-header">
-            <span>{{ field.label }}</span>
-            <button type="button" class="notes-trigger" data-note-target="notes-{{ field.auto_id }}">Add note</button>
+  <div class="add-client-toggle" role="button" tabindex="0" aria-expanded="{% if form.errors %}true{% else %}false{% endif %}">
+    <h2 style="margin:0;">Add Client</h2>
+  </div>
+    <div class="add-client-body{% if form.errors %} is-open{% endif %}">
+      <form method="post" class="form-grid">
+        {% csrf_token %}
+        {{ form.non_field_errors }}
+        {% for field in form %}
+        {% if field.name == "notes" %}
+          {% with has_value=field.value %}
+        <label class="client-notes-field">
+          <span>{{ field.label }}</span>
+          <div class="notes-field{% if has_value or field.errors %} is-open{% endif %}">
+            <div class="notes-header">
+              <button type="button" class="notes-trigger" data-note-target="notes-{{ field.auto_id }}">Add note</button>
+            </div>
+            <div class="notes-collapse" id="notes-{{ field.auto_id }}">
+              {{ field }}
+              {% if field.errors %}
+                <small style="color:#c00;">{{ field.errors|join:", " }}</small>
+              {% endif %}
+            </div>
           </div>
-          <div class="notes-collapse" id="notes-{{ field.auto_id }}">
-            {{ field }}
-            {% if field.errors %}
-              <small style="color:#c00;">{{ field.errors|join:", " }}</small>
-            {% endif %}
-          </div>
-        </div>
-        {% endwith %}
+        </label>
+          {% endwith %}
       {% else %}
         <label>
           <span>{{ field.label }}{% if field.field.required %} *{% endif %}</span>
@@ -31,10 +141,11 @@
         </label>
       {% endif %}
     {% endfor %}
-    <div style="grid-column:1/-1; display:flex; justify-content:flex-end;">
-      <button type="submit">Save Client</button>
-    </div>
-  </form>
+      <div style="grid-column:1/-1;">
+        <button type="submit" style="width:100%;">Add Client</button>
+      </div>
+    </form>
+  </div>
 </section>
 
 <section class="section-card">
@@ -60,7 +171,7 @@
   </div>
 
   <div class="table-card table-scroll mobile-cards" style="margin-top:16px;">
-    <table>
+    <table class="clients-table">
       <thead>
         <tr><th>Name</th><th>Status</th><th>Actions</th></tr>
       </thead>
@@ -238,6 +349,24 @@
       });
     }
     applySearch();
+  })();
+</script>
+<script>
+  (function () {
+    const toggle = document.querySelector(".add-client-toggle");
+    const body = document.querySelector(".add-client-body");
+    if (!toggle || !body) return;
+    function toggleBody() {
+      const isOpen = body.classList.toggle("is-open");
+      toggle.setAttribute("aria-expanded", isOpen ? "true" : "false");
+    }
+    toggle.addEventListener("click", toggleBody);
+    toggle.addEventListener("keydown", (e) => {
+      if (e.key === "Enter" || e.key === " ") {
+        e.preventDefault();
+        toggleBody();
+      }
+    });
   })();
 </script>
 {% endblock %}
