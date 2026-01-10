@@ -650,6 +650,8 @@
     });
     const startInput = document.querySelector("input[name='start']");
     const endInput = document.querySelector("input[name='end']");
+    const bankInput = document.querySelector(".cards-filter-bank .combo-input");
+    const groupInput = document.querySelector(".cards-filter-group .combo-input");
     if (startInput) {
       startInput.addEventListener("change", applySearch);
       startInput.addEventListener("input", () => {
@@ -662,6 +664,22 @@
       endInput.addEventListener("change", applySearch);
       endInput.addEventListener("input", () => {
         if (!endInput.value.trim()) {
+          applySearch();
+        }
+      });
+    }
+    if (bankInput) {
+      bankInput.addEventListener("change", applySearch);
+      bankInput.addEventListener("input", () => {
+        if (!bankInput.value.trim()) {
+          applySearch();
+        }
+      });
+    }
+    if (groupInput) {
+      groupInput.addEventListener("change", applySearch);
+      groupInput.addEventListener("input", () => {
+        if (!groupInput.value.trim()) {
           applySearch();
         }
       });

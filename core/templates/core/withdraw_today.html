@@ -883,6 +883,16 @@
 		});
 	  }
 
+	  function scheduleAutosave(row) {
+		if (row._saveTimer) {
+		  clearTimeout(row._saveTimer);
+		}
+		row._saveTimer = setTimeout(() => {
+		  row._saveTimer = null;
+		  autosave(row);
+		}, 600);
+	  }
+
 	  function bindRows() {
 		document.querySelectorAll("tr[data-card-id]").forEach(row => {
 		  if (row.dataset.bound) return;
@@ -932,6 +942,7 @@
 			if (e.target.classList.contains("withdrawn") || e.target.classList.contains("commission")) {
 			  e.target.value = formatInputValue(e.target.value);
 			  refreshTotals();
+			  scheduleAutosave(row);
 			}
 		  });
 
@@ -939,6 +950,10 @@
 			input.addEventListener("blur", () => {
 			  if (!input.value) return;
 			  input.value = formatInputValue(input.value);
+			});
+			input.addEventListener("change", () => {
+			  refreshTotals();
+			  autosave(row);
 			});
 		  });
 		});
