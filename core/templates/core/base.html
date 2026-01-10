@@ -577,6 +577,9 @@
       background: rgba(255, 255, 255, 0.1);
       outline: none;
     }
+    .combo-dropdown button.is-active {
+      background: rgba(255, 255, 255, 0.18);
+    }
     .currency-input {
       position: relative;
       width: 100%;
@@ -1248,56 +1251,98 @@
           return values.find(v => v.toLowerCase() === q) || "";
         };
 
-        document.querySelectorAll(".combo-wrapper[data-combo-list]").forEach(wrapper => {
-          const input = wrapper.querySelector(".combo-input");
-          const dropdown = wrapper.querySelector(".combo-dropdown");
-          const listId = wrapper.getAttribute("data-combo-list");
-          const targetId = wrapper.getAttribute("data-combo-target");
-          const hidden = targetId ? document.getElementById(targetId) : null;
-          if (!input || !dropdown || !listId) return;
+          document.querySelectorAll(".combo-wrapper[data-combo-list]").forEach(wrapper => {
+            const input = wrapper.querySelector(".combo-input");
+            const dropdown = wrapper.querySelector(".combo-dropdown");
+            const listId = wrapper.getAttribute("data-combo-list");
+            const targetId = wrapper.getAttribute("data-combo-target");
+            const hidden = targetId ? document.getElementById(targetId) : null;
+            if (!input || !dropdown || !listId) return;
+            let activeIndex = -1;
 
-          const applySelection = (value) => {
-            input.value = value;
-            if (hidden) hidden.value = value;
-            dropdown.style.display = "none";
-            input.dispatchEvent(new Event("change"));
-          };
-
-          const renderDropdown = (term) => {
-            const options = filterValues(readOptions(listId), term);
-            dropdown.innerHTML = "";
-            if (!options.length) {
-              dropdown.style.display = "none";
-              return;
-            }
-            options.forEach(value => {
-              const btn = document.createElement("button");
-              btn.type = "button";
-              btn.textContent = value;
-              btn.addEventListener("click", () => applySelection(value));
-              dropdown.appendChild(btn);
-            });
-            dropdown.style.display = "block";
-          };
-
-          input.addEventListener("focus", () => renderDropdown(input.value));
-          input.addEventListener("input", () => {
-            if (hidden) hidden.value = input.value;
-            renderDropdown(input.value);
-          });
-          input.addEventListener("keydown", (event) => {
-            if (event.key === "Enter") {
-              const options = readOptions(listId);
-              const match = findExact(options, input.value) || filterValues(options, input.value)[0];
-              if (match) {
-                event.preventDefault();
-                applySelection(match);
+            const setActiveIndex = (index) => {
+              const buttons = Array.from(dropdown.querySelectorAll("button"));
+              if (!buttons.length) {
+                activeIndex = -1;
+                return;
               }
-            }
-            if (event.key === "Escape") {
+              activeIndex = Math.max(0, Math.min(index, buttons.length - 1));
+              buttons.forEach((btn, i) => {
+                btn.classList.toggle("is-active", i === activeIndex);
+              });
+            };
+
+            const applySelection = (value) => {
+              input.value = value;
+              if (hidden) hidden.value = value;
               dropdown.style.display = "none";
-            }
-          });
+              input.dispatchEvent(new Event("change"));
+            };
+
+            const renderDropdown = (term) => {
+              const options = filterValues(readOptions(listId), term);
+              dropdown.innerHTML = "";
+              if (!options.length) {
+                dropdown.style.display = "none";
+                return;
+              }
+              options.forEach(value => {
+                const btn = document.createElement("button");
+                btn.type = "button";
+                btn.textContent = value;
+                btn.addEventListener("mousedown", (event) => {
+                  event.preventDefault();
+                  applySelection(value);
+                });
+                btn.addEventListener("mouseenter", () => {
+                  setActiveIndex(Array.from(dropdown.querySelectorAll("button")).indexOf(btn));
+                });
+                dropdown.appendChild(btn);
+              });
+              dropdown.style.display = "block";
+              setActiveIndex(0);
+            };
+
+            const selectActive = () => {
+              const buttons = Array.from(dropdown.querySelectorAll("button"));
+              if (activeIndex >= 0 && buttons[activeIndex]) {
+                applySelection(buttons[activeIndex].textContent || "");
+                return true;
+              }
+              return false;
+            };
+
+            input.addEventListener("focus", () => renderDropdown(input.value));
+            input.addEventListener("input", () => {
+              if (hidden) hidden.value = input.value;
+              renderDropdown(input.value);
+            });
+            input.addEventListener("keydown", (event) => {
+              if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+                event.preventDefault();
+                if (dropdown.style.display !== "block") {
+                  renderDropdown(input.value);
+                  return;
+                }
+                setActiveIndex(activeIndex + (event.key === "ArrowDown" ? 1 : -1));
+                return;
+              }
+              if (event.key === "Enter") {
+                const options = readOptions(listId);
+                if (selectActive()) {
+                  event.preventDefault();
+                  return;
+                }
+                const match = findExact(options, input.value) || filterValues(options, input.value)[0];
+                if (match) {
+                  event.preventDefault();
+                  applySelection(match);
+                }
+              }
+              if (event.key === "Escape") {
+                dropdown.style.display = "none";
+              }
+            });
           input.addEventListener("blur", () => {
             setTimeout(() => {
               dropdown.style.display = "none";
