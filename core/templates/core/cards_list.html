@@ -23,6 +23,33 @@
   .add-card-body {
     width: 100%;
   }
+  .cards-filters {
+    display: grid !important;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1fr) auto;
+    grid-template-areas:
+      "bank group from to hide"
+      "search search search search search";
+    gap: 12px;
+    align-items: end;
+  }
+  .cards-filters > label {
+    min-width: 0 !important;
+  }
+  .cards-filters .cards-filter-bank { grid-area: bank; }
+  .cards-filters .cards-filter-group { grid-area: group; }
+  .cards-filters .cards-filter-from { grid-area: from; }
+  .cards-filters .cards-filter-to { grid-area: to; }
+  .cards-filters .cards-search { grid-area: search; }
+  .cards-zero-toggle {
+    grid-area: hide;
+    justify-self: end;
+    white-space: nowrap;
+  }
+  .cards-zero-toggle {
+    padding: 0;
+    align-self: end;
+    transform: translateY(-10px);
+  }
   @media (max-width: 720px) {
     .add-card-toggle {
       display: flex;
@@ -37,10 +64,21 @@
     .cards-filters {
       display: grid !important;
       grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+      grid-template-areas:
+        "bank bank"
+        "group group"
+        "from from"
+        "to to"
+        "hide hide"
+        "search search";
       gap: 10px 12px;
     }
     .cards-filters label {
       min-width: 0 !important;
+    }
+    .cards-zero-toggle {
+      margin-top: 10px;
+      padding: 8px 0 12px;
     }
     .cards-table {
       width: 100%;
@@ -145,6 +183,30 @@
       text-align: right;
       font-weight: 600;
     }
+    .cards-zero-toggle {
+      grid-column: 1 / -1;
+      justify-self: start;
+    }
+  }
+  .cards-zero-toggle {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 0;
+  }
+  .cards-zero-toggle.push-right {
+    margin-left: auto;
+  }
+  .cards-zero-toggle span {
+    margin: 0;
+    font-size: 0.85rem;
+    color: var(--muted);
+  }
+  .cards-zero-toggle input[type="checkbox"] {
+    width: 16px;
+    height: 16px;
+    min-height: 0;
+    padding: 0;
   }
   .add-card-body .card-notes-field {
     display: flex;
@@ -245,16 +307,20 @@
     <option value="{{ bank }}"></option>
   {% endfor %}
 </datalist>
+{{ bank_colors|json_script:"bank-color-map" }}
 
 
 <section class="section-card">
   <div style="display:flex; flex-direction:column; gap:12px;">
     <div style="display:flex; flex-wrap:wrap; justify-content:space-between; gap:12px; align-items:center;">
-      <h2 style="margin:0;">Cards</h2>
-      <a href="/cards/export/{% if bank_filter or group_filter or start or end or query %}?{% endif %}{% if bank_filter %}bank={{ bank_filter|urlencode }}{% if group_filter or start or end or query %}&{% endif %}{% endif %}{% if group_filter %}group={{ group_filter|urlencode }}{% if start or end or query %}&{% endif %}{% endif %}{% if start %}start={{ start|urlencode }}{% if end or query %}&{% endif %}{% endif %}{% if end %}end={{ end|urlencode }}{% if query %}&{% endif %}{% endif %}{% if query %}q={{ query|urlencode }}{% endif %}">Export CSV</a>
+      <div>
+        <h2 style="margin:0;">Cards</h2>
+        <div style="font-size:0.85rem;color:var(--muted);">Total cards: {{ total_cards }}</div>
+      </div>
+      <a href="/cards/export/{% if bank_filter or group_filter or start or end or query or hide_zero %}?{% endif %}{% if bank_filter %}bank={{ bank_filter|urlencode }}{% if group_filter or start or end or query or hide_zero %}&{% endif %}{% endif %}{% if group_filter %}group={{ group_filter|urlencode }}{% if start or end or query or hide_zero %}&{% endif %}{% endif %}{% if start %}start={{ start|urlencode }}{% if end or query or hide_zero %}&{% endif %}{% endif %}{% if end %}end={{ end|urlencode }}{% if query or hide_zero %}&{% endif %}{% endif %}{% if query %}q={{ query|urlencode }}{% if hide_zero %}&{% endif %}{% endif %}{% if hide_zero %}hide_zero=1{% endif %}">Export CSV</a>
     </div>
-    <form method="get" class="cards-filters" style="display:flex; gap:12px; flex-wrap:wrap; align-items:flex-end; width:100%;">
-      <label style="display:flex; flex-direction:column; min-width:200px;">
+    <form method="get" class="cards-filters">
+      <label class="cards-filter-bank" style="display:flex; flex-direction:column; min-width:200px;">
         <span>Bank</span>
         <div class="combo-wrapper" data-combo-list="bank-options" data-combo-target="cards-bank-filter">
           <input type="hidden" name="bank" id="cards-bank-filter" value="{{ bank_filter }}">
@@ -262,7 +328,7 @@
           <div class="combo-dropdown"></div>
         </div>
       </label>
-      <label style="display:flex; flex-direction:column; min-width:200px;">
+      <label class="cards-filter-group" style="display:flex; flex-direction:column; min-width:200px;">
         <span>Group</span>
         <div class="combo-wrapper" data-combo-list="group-options" data-combo-target="cards-group-filter">
           <input type="hidden" name="group" id="cards-group-filter" value="{{ group_filter }}">
@@ -270,21 +336,25 @@
           <div class="combo-dropdown"></div>
         </div>
       </label>
-      <label style="display:flex; flex-direction:column;">
+      <label class="cards-zero-toggle push-right">
+        <input type="checkbox" name="hide_zero" value="1" {% if hide_zero %}checked{% endif %}>
+        <span>Hide zero balance</span>
+      </label>
+      <label class="cards-filter-from" style="display:flex; flex-direction:column;">
         <span>From</span>
         <div class="date-field">
           <input type="text" name="start" placeholder="dd/mm/yyyy" value="{{ start }}" autocomplete="off" inputmode="numeric" class="date-input js-date-input">
           <button type="button" class="calendar-toggle" aria-label="Open calendar">&#128197;</button>
         </div>
       </label>
-      <label style="display:flex; flex-direction:column;">
+      <label class="cards-filter-to" style="display:flex; flex-direction:column;">
         <span>To</span>
         <div class="date-field">
           <input type="text" name="end" placeholder="dd/mm/yyyy" value="{{ end }}" autocomplete="off" inputmode="numeric" class="date-input js-date-input">
           <button type="button" class="calendar-toggle" aria-label="Open calendar">&#128197;</button>
         </div>
       </label>
-      <label style="display:flex; flex-direction:column; min-width:220px; flex:1;">
+      <label class="cards-search" style="display:flex; flex-direction:column; min-width:220px; flex:1;">
         <span>Search</span>
         <input type="text" name="q" placeholder="Search cards..." value="{{ query }}">
       </label>
@@ -337,21 +407,21 @@
   {% if page_obj.has_other_pages %}
     <div class="pagination" style="margin-top:16px; display:flex; gap:8px; flex-wrap:wrap; align-items:center;">
       {% if page_obj.has_previous %}
-        <a href="?{% if bank_filter %}bank={{ bank_filter|urlencode }}&{% endif %}{% if group_filter %}group={{ group_filter|urlencode }}&{% endif %}{% if start %}start={{ start|urlencode }}&{% endif %}{% if end %}end={{ end|urlencode }}&{% endif %}{% if query %}q={{ query|urlencode }}&{% endif %}per_page={{ per_page }}&page={{ page_obj.previous_page_number }}">Prev</a>
+        <a href="?{% if bank_filter %}bank={{ bank_filter|urlencode }}&{% endif %}{% if group_filter %}group={{ group_filter|urlencode }}&{% endif %}{% if start %}start={{ start|urlencode }}&{% endif %}{% if end %}end={{ end|urlencode }}&{% endif %}{% if query %}q={{ query|urlencode }}&{% endif %}{% if hide_zero %}hide_zero=1&{% endif %}per_page={{ per_page }}&page={{ page_obj.previous_page_number }}">Prev</a>
       {% endif %}
       {% for num in page_items %}
         {% if num %}
           {% if num == page_obj.number %}
             <span style="padding:4px 8px; border-radius:8px; background:#e2e8f0; font-weight:600;">{{ num }}</span>
           {% else %}
-            <a href="?{% if bank_filter %}bank={{ bank_filter|urlencode }}&{% endif %}{% if group_filter %}group={{ group_filter|urlencode }}&{% endif %}{% if start %}start={{ start|urlencode }}&{% endif %}{% if end %}end={{ end|urlencode }}&{% endif %}{% if query %}q={{ query|urlencode }}&{% endif %}per_page={{ per_page }}&page={{ num }}" style="padding:4px 8px;">{{ num }}</a>
+            <a href="?{% if bank_filter %}bank={{ bank_filter|urlencode }}&{% endif %}{% if group_filter %}group={{ group_filter|urlencode }}&{% endif %}{% if start %}start={{ start|urlencode }}&{% endif %}{% if end %}end={{ end|urlencode }}&{% endif %}{% if query %}q={{ query|urlencode }}&{% endif %}{% if hide_zero %}hide_zero=1&{% endif %}per_page={{ per_page }}&page={{ num }}" style="padding:4px 8px;">{{ num }}</a>
           {% endif %}
         {% else %}
           <span style="padding:4px 6px; color:var(--muted);">...</span>
         {% endif %}
       {% endfor %}
       {% if page_obj.has_next %}
-        <a href="?{% if bank_filter %}bank={{ bank_filter|urlencode }}&{% endif %}{% if group_filter %}group={{ group_filter|urlencode }}&{% endif %}{% if start %}start={{ start|urlencode }}&{% endif %}{% if end %}end={{ end|urlencode }}&{% endif %}{% if query %}q={{ query|urlencode }}&{% endif %}per_page={{ per_page }}&page={{ page_obj.next_page_number }}">Next</a>
+        <a href="?{% if bank_filter %}bank={{ bank_filter|urlencode }}&{% endif %}{% if group_filter %}group={{ group_filter|urlencode }}&{% endif %}{% if start %}start={{ start|urlencode }}&{% endif %}{% if end %}end={{ end|urlencode }}&{% endif %}{% if query %}q={{ query|urlencode }}&{% endif %}{% if hide_zero %}hide_zero=1&{% endif %}per_page={{ per_page }}&page={{ page_obj.next_page_number }}">Next</a>
       {% endif %}
     </div>
   {% endif %}
@@ -390,6 +460,7 @@
     const pagination = document.querySelector(".pagination");
     const totalsBody = document.querySelector(".cards-totals-body");
     const exportLink = document.querySelector("a[href^='/cards/export/']");
+    const hideZeroInput = document.querySelector("input[name='hide_zero']");
     if (!searchInput || !tbody) return;
 
     const initialBody = tbody.innerHTML;
@@ -429,11 +500,13 @@
       const group = getValue("#cards-group-filter");
       const start = getValue("input[name='start']");
       const end = getValue("input[name='end']");
+      const hideZero = document.querySelector("input[name='hide_zero']");
       const query = includeQuery ? searchInput.value.trim() : "";
       if (bank) params.set("bank", bank);
       if (group) params.set("group", group);
       if (start) params.set("start", start);
       if (end) params.set("end", end);
+      if (hideZero && hideZero.checked) params.set("hide_zero", "1");
       if (query) params.set("q", query);
       return params;
     }
@@ -531,11 +604,21 @@
       togglePagination(true);
     }
 
+    function hasActiveFilters() {
+      const bank = getValue("#cards-bank-filter");
+      const group = getValue("#cards-group-filter");
+      const start = getValue("input[name='start']");
+      const end = getValue("input[name='end']");
+      const hideZero = hideZeroInput && hideZeroInput.checked;
+      return Boolean(bank || group || start || end || hideZero);
+    }
+
     function applySearch() {
+      const scrollY = window.scrollY || document.documentElement.scrollTop || 0;
       const term = searchInput.value.trim();
       const params = buildParams(true);
-      updateExportLink(buildParams(term !== ""));
-      if (!term) {
+      updateExportLink(buildParams(true));
+      if (!term && !hasActiveFilters()) {
         restoreInitial();
         return;
       }
@@ -548,6 +631,10 @@
         .then(data => {
           renderRows(data.results || []);
           renderTotals(data.totals || null);
+          requestAnimationFrame(() => {
+            const maxY = Math.max(0, document.body.scrollHeight - window.innerHeight);
+            window.scrollTo(0, Math.min(scrollY, maxY));
+          });
         })
         .catch(() => {});
     }
@@ -579,6 +666,9 @@
         }
       });
     }
+    if (hideZeroInput) {
+      hideZeroInput.addEventListener("change", applySearch);
+    }
     document.addEventListener("click", (event) => {
       const target = event.target;
       if (target && target.matches("button[data-action='clear']")) {
@@ -604,6 +694,62 @@
         toggleBody();
       }
     });
+  })();
+</script>
+<script>
+  (function () {
+    const bankInput = document.querySelector(".cards-add-form input[name='bank']");
+    const colorInput = document.querySelector(".cards-add-form input[name='bank_color']");
+    const mapEl = document.getElementById("bank-color-map");
+    if (!bankInput || !colorInput || !mapEl) return;
+    let bankColors = {};
+    try {
+      bankColors = JSON.parse(mapEl.textContent || "{}");
+    } catch (e) {
+      bankColors = {};
+    }
+    const bankColorsLower = {};
+    Object.keys(bankColors).forEach((key) => {
+      bankColorsLower[key.toLowerCase()] = bankColors[key];
+    });
+
+    function syncColorFromBank() {
+      const bank = bankInput.value.trim().toLowerCase();
+      if (bank && bankColorsLower[bank]) {
+        colorInput.value = bankColorsLower[bank];
+      }
+    }
+
+    function rememberColor() {
+      const bank = bankInput.value.trim().toLowerCase();
+      if (bank) {
+        bankColorsLower[bank] = colorInput.value;
+      }
+    }
+
+    bankInput.addEventListener("input", syncColorFromBank);
+    bankInput.addEventListener("change", syncColorFromBank);
+    bankInput.addEventListener("blur", syncColorFromBank);
+    colorInput.addEventListener("input", rememberColor);
+  })();
+</script>
+<script>
+  (function () {
+    const cardNumberInput = document.querySelector(".cards-add-form input[name='card_number']");
+    if (!cardNumberInput) return;
+
+    function formatCardNumber(value) {
+      const digits = value.replace(/\D/g, "");
+      if (!digits) return "";
+      return digits.match(/.{1,4}/g).join(" ");
+    }
+
+    function handleCardNumberInput() {
+      cardNumberInput.value = formatCardNumber(cardNumberInput.value);
+    }
+
+    cardNumberInput.addEventListener("input", handleCardNumberInput);
+    cardNumberInput.addEventListener("blur", handleCardNumberInput);
   })();
 </script>
 {% endblock %}

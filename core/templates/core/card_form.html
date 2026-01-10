@@ -69,6 +69,58 @@
     <option value="{{ bank }}"></option>
   {% endfor %}
 </datalist>
+{{ bank_colors|json_script:"bank-color-map" }}
+
+<script>
+  (function () {
+    const bankInput = document.querySelector("input[name='bank']");
+    const colorInput = document.querySelector("input[name='bank_color']");
+    const mapEl = document.getElementById("bank-color-map");
+    if (!bankInput || !colorInput || !mapEl) return;
+    let bankColors = {};
+    try {
+      bankColors = JSON.parse(mapEl.textContent || "{}");
+    } catch (e) {
+      bankColors = {};
+    }
+    const bankColorsLower = {};
+    Object.keys(bankColors).forEach((key) => {
+      bankColorsLower[key.toLowerCase()] = bankColors[key];
+    });
+
+    function syncColorFromBank() {
+      const bank = bankInput.value.trim().toLowerCase();
+      if (bank && bankColorsLower[bank]) {
+        colorInput.value = bankColorsLower[bank];
+      }
+    }
+
+    function rememberColor() {
+      const bank = bankInput.value.trim().toLowerCase();
+      if (bank) {
+        bankColorsLower[bank] = colorInput.value;
+      }
+    }
+
+    bankInput.addEventListener("input", syncColorFromBank);
+    bankInput.addEventListener("change", syncColorFromBank);
+    bankInput.addEventListener("blur", syncColorFromBank);
+    colorInput.addEventListener("input", rememberColor);
+
+    const cardNumberInput = document.querySelector("input[name='card_number']");
+    if (!cardNumberInput) return;
+    function formatCardNumber(value) {
+      const digits = value.replace(/\D/g, "");
+      if (!digits) return "";
+      return digits.match(/.{1,4}/g).join(" ");
+    }
+    function handleCardNumberInput() {
+      cardNumberInput.value = formatCardNumber(cardNumberInput.value);
+    }
+    cardNumberInput.addEventListener("input", handleCardNumberInput);
+    cardNumberInput.addEventListener("blur", handleCardNumberInput);
+  })();
+</script>
 
 <p><a href="/cards/">Back to Cards</a></p>
 {% endblock %}

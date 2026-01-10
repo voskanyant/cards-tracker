@@ -151,7 +151,10 @@
 <section class="section-card">
   <div style="display:flex; flex-direction:column; gap:12px;">
     <div style="display:flex; flex-wrap:wrap; justify-content:space-between; gap:12px; align-items:center;">
-      <h2 style="margin:0;">Clients</h2>
+      <div>
+        <h2 style="margin:0;">Clients</h2>
+        <div style="font-size:0.85rem;color:var(--muted);">Total clients: {{ total_clients }}</div>
+      </div>
       <a class="clients-export" href="/clients/export/{% if query %}?q={{ query|urlencode }}{% endif %}">Export CSV</a>
     </div>
     <div class="clients-controls">

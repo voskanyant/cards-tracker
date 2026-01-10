@@ -531,9 +531,11 @@
 		  {% for r in page_obj %}
 			<tr class="withdraw-item" data-card-id="{{ r.card_id }}" data-should="{{ r.should_have|floatformat:'2' }}">
 			  <td class="col-card cell-card">
-				<div class="desktop-card-label">{{ r.card_label }}</div>
+				{% with color=bank_colors|dict_get:r.bank %}
+				<div class="desktop-card-label"{% if color %} style="color: {{ color }}"{% endif %}>{{ r.card_label }}</div>
 				<div class="mobile-main">
-				  <div class="card">{{ r.card_label }}</div>
+				  <div class="card"{% if color %} style="color: {{ color }}"{% endif %}>{{ r.card_label }}</div>
+				{% endwith %}
 				  <div class="mobile-meta">
 					<div class="pin"><span>PIN</span><strong class="pin-value">{{ r.pin }}</strong></div>
 					<div class="due"><span>Due</span>{{ r.should_have|spaced_number }} ₽</div>
@@ -948,10 +950,15 @@
 	  const noteDeleteBtn = noteModal?.querySelector("[data-note-action='delete']");
 	  const noteCancelBtn = noteModal?.querySelector("[data-note-action='cancel']");
 	  let activeNoteRow = null;
+	  let noteScrollY = 0;
 
 	  function closeNoteModal() {
 		noteModal?.classList.remove("is-open");
 		activeNoteRow = null;
+		requestAnimationFrame(() => {
+		  const maxY = Math.max(0, document.body.scrollHeight - window.innerHeight);
+		  window.scrollTo(0, Math.min(noteScrollY, maxY));
+		});
 	  }
 
 	  function openNoteModal(row) {
@@ -959,8 +966,13 @@
 		activeNoteRow = row;
 		const hidden = row.querySelector(".note");
 		noteTextarea.value = hidden?.value || "";
+		noteScrollY = window.scrollY || document.documentElement.scrollTop || 0;
 		noteModal.classList.add("is-open");
 		noteTextarea.focus();
+		setTimeout(() => {
+		  const maxY = Math.max(0, document.body.scrollHeight - window.innerHeight);
+		  window.scrollTo(0, Math.min(noteScrollY, maxY));
+		}, 0);
 	  }
 
 	  function updateNoteDisplay(row, value) {
@@ -1116,6 +1128,7 @@
 		}
 		tbody.innerHTML = items.map(item => {
 		  const cardLabel = escapeHtml(item.card_label);
+		  const cardColor = escapeHtml(item.bank_color || "");
 		  const pin = escapeHtml(item.pin);
 		  const shouldRaw = item.should_have || "0";
 		  const remainingRaw = item.remaining || "0";
@@ -1134,9 +1147,9 @@
 		  return `
 			<tr class="withdraw-item" data-card-id="${escapeHtml(item.card_id)}" data-should="${escapeHtml(shouldRaw)}">
 			  <td class="col-card cell-card">
-				<div class="desktop-card-label">${cardLabel}</div>
+				<div class="desktop-card-label"${cardColor ? ` style="color: ${cardColor}"` : ""}>${cardLabel}</div>
 				<div class="mobile-main">
-				  <div class="card">${cardLabel}</div>
+				  <div class="card"${cardColor ? ` style="color: ${cardColor}"` : ""}>${cardLabel}</div>
 				  <div class="mobile-meta">
 					<div class="pin"><span>PIN</span><strong class="pin-value">${pin}</strong></div>
 					<div class="due"><span>Due</span>${should} ₽</div>

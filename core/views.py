@@ -18,7 +18,7 @@ from django.utils import timezone
 from django.shortcuts import get_object_or_404, redirect
 from django.urls import reverse
 from .forms import CardForm, CardGroupForm, ClientForm, TransactionForm
-from .models import Card, CardGroup, Client, Transaction, Withdrawal
+from .models import BankColor, Card, CardGroup, Client, Transaction, Withdrawal
 
 DATE_DISPLAY_FORMAT = "%d/%m/%Y"
 DATE_PARSE_FORMATS = ["%d/%m/%Y", "%Y-%m-%d"]
@@ -174,6 +174,10 @@ def _bank_name_list():
     )
 
 
+def _bank_color_map():
+    return {item.bank: item.color for item in BankColor.objects.all()}
+
+
 def _parse_user_date(raw: str):
     raw = (raw or "").strip()
     if not raw:
@@ -285,6 +289,7 @@ def _cards_with_totals(cards, start_date=None, end_date=None):
 def _withdraw_rows_for_day(day):
     rows = []
     banks = []
+    bank_colors = _bank_color_map()
     for card in Card.objects.filter(status="active").order_by("name"):
         carry_in = _closing_before(card, day)
         received = _received_today(card, day)
@@ -327,6 +332,7 @@ def _withdraw_rows_for_day(day):
                     "withdrawal": wd,
                     "remaining": remaining,
                     "bank": bank_label,
+                    "bank_color": bank_colors.get(bank_label, ""),
                     "withdrawn_value": withdrawn_amount,
                     "commission_value": commission,
                 }
@@ -558,6 +564,7 @@ def _dashboard_payload(request):
         "our": {"received": Decimal("0"), "withdrawn": Decimal("0"), "commission": Decimal("0")},
         "clients": {"received": Decimal("0"), "withdrawn": Decimal("0"), "commission": Decimal("0")},
     }
+    bank_colors = _bank_color_map()
 
     for card in cards_list:
         bucket = _card_bucket(card)
@@ -569,6 +576,7 @@ def _dashboard_payload(request):
                 "label": _card_display(card),
                 "value": value,
                 "balance": card.balance_total,
+                "bank": (card.bank or "").strip(),
             }
         )
 
@@ -646,6 +654,7 @@ def _dashboard_payload(request):
                 "balance": row.get("balance", Decimal("0")),
                 "withdrawn": wd["withdrawn"],
                 "commission": wd["commission"],
+                "bank_color": bank_colors.get(row.get("bank") or "", ""),
             }
         )
 
@@ -661,6 +670,7 @@ def _dashboard_payload(request):
         "summary_totals": selected_totals,
         "summary_pct": summary_pct,
         "card_list": card_list,
+        "bank_colors": bank_colors,
     }
 
     payload = {
@@ -684,6 +694,7 @@ def _dashboard_payload(request):
                 "balance": _format_spaced_number(row["balance"]),
                 "withdrawn": _format_spaced_number(row["withdrawn"]),
                 "commission": _format_spaced_number(row["commission"]),
+                "bank_color": row.get("bank_color") or "",
             }
             for row in card_list
         ],
@@ -758,6 +769,7 @@ def withdraw_today(request):
             "page_items": _pagination_items(page_obj),
             "totals": totals,
             "banks": banks,
+            "bank_colors": _bank_color_map(),
             "selected_bank": bank_filter,
             "query": query,
             "per_page": per_page,
@@ -790,7 +802,6 @@ def withdraw_search(request):
             or q in (r["bank"] or "").lower()
             or q in (r["pin"] or "").lower()
         ]
-
     data = []
     for r in rows:
         wd = r["withdrawal"]
@@ -798,6 +809,7 @@ def withdraw_search(request):
             {
                 "card_id": r["card_id"],
                 "card_label": r["card_label"],
+                "bank_color": r.get("bank_color") or "",
                 "pin": r["pin"] or "",
                 "should_have": str(r["should_have"]),
                 "remaining": str(r["remaining"]),
@@ -889,6 +901,7 @@ def withdraw_update_time(request, pk: int):
 
 @login_required
 def cards_list(request):
+    total_cards = Card.objects.count()
     cards = Card.objects.select_related("group").all().order_by("name")
     groups = CardGroup.objects.order_by("name")
     banks = _bank_name_list()
@@ -898,6 +911,7 @@ def cards_list(request):
     bank_filter = (request.GET.get("bank") or "").strip()
     group_filter = (request.GET.get("group") or "").strip()
     query = (request.GET.get("q") or "").strip()
+    hide_zero = (request.GET.get("hide_zero") or "") == "1"
     per_page = _parse_per_page(request.GET.get("per_page"), default=50)
     start_date = _parse_user_date(start_raw)
     end_date = _parse_user_date(end_raw)
@@ -937,6 +951,14 @@ def cards_list(request):
     }
 
     cards_list, overall = _cards_with_totals(cards, start_date, end_date)
+    if hide_zero:
+        cards_list = [card for card in cards_list if card.balance_total != Decimal("0")]
+        overall = {
+            "received": sum((card.received_total for card in cards_list), Decimal("0")),
+            "withdrawn": sum((card.withdrawn_total for card in cards_list), Decimal("0")),
+            "commission": sum((card.commission_total for card in cards_list), Decimal("0")),
+            "balance": sum((card.balance_total for card in cards_list), Decimal("0")),
+        }
 
     paginator = Paginator(cards_list, per_page)
     page_number = request.GET.get("page")
@@ -960,9 +982,12 @@ def cards_list(request):
             "overall": overall,
             "groups": groups,
             "banks": banks,
+            "bank_colors": _bank_color_map(),
             "query": query,
+            "hide_zero": hide_zero,
             "per_page": per_page,
             "per_page_choices": PER_PAGE_CHOICES,
+            "total_cards": total_cards,
         },
     )
 
@@ -974,6 +999,7 @@ def cards_export(request):
     bank_filter = (request.GET.get("bank") or "").strip()
     group_filter = (request.GET.get("group") or "").strip()
     query = (request.GET.get("q") or "").strip()
+    hide_zero = (request.GET.get("hide_zero") or "") == "1"
     start_date = _parse_user_date(start_raw)
     end_date = _parse_user_date(end_raw)
 
@@ -992,6 +1018,8 @@ def cards_export(request):
         )
 
     cards_list, overall = _cards_with_totals(cards, start_date, end_date)
+    if hide_zero:
+        cards_list = [card for card in cards_list if card.balance_total != Decimal("0")]
 
     response = HttpResponse(content_type="text/csv")
     response["Content-Disposition"] = 'attachment; filename="cards.csv"'
@@ -1033,6 +1061,7 @@ def cards_search(request):
     bank_filter = (request.GET.get("bank") or "").strip()
     group_filter = (request.GET.get("group") or "").strip()
     query = (request.GET.get("q") or "").strip()
+    hide_zero = (request.GET.get("hide_zero") or "") == "1"
     start_date = _parse_user_date(start_raw)
     end_date = _parse_user_date(end_raw)
 
@@ -1050,7 +1079,15 @@ def cards_search(request):
             | Q(notes__icontains=query)
         )
 
-    cards_list, _overall = _cards_with_totals(cards, start_date, end_date)
+    cards_list, overall = _cards_with_totals(cards, start_date, end_date)
+    if hide_zero:
+        cards_list = [card for card in cards_list if card.balance_total != Decimal("0")]
+        overall = {
+            "received": sum((card.received_total for card in cards_list), Decimal("0")),
+            "withdrawn": sum((card.withdrawn_total for card in cards_list), Decimal("0")),
+            "commission": sum((card.commission_total for card in cards_list), Decimal("0")),
+            "balance": sum((card.balance_total for card in cards_list), Decimal("0")),
+        }
     data = []
     for card in cards_list:
         data.append(
@@ -1078,6 +1115,7 @@ def cards_search(request):
 
 @login_required
 def clients_list(request):
+    total_clients = Client.objects.count()
     clients = Client.objects.all().order_by("name")
     query = (request.GET.get("q") or "").strip()
     if query:
@@ -1100,6 +1138,7 @@ def clients_list(request):
             "query": query,
             "per_page": per_page,
             "per_page_choices": PER_PAGE_CHOICES,
+            "total_clients": total_clients,
         },
     )
 
@@ -1221,6 +1260,7 @@ def transactions_list(request):
         "clients": clients,
         "card_lookup": {str(c.id): c.display_label for c in cards},
         "client_lookup": {str(c.id): c.name for c in clients},
+        "bank_colors": _bank_color_map(),
     }
     return render(request, "core/transactions_list.html", context)
 
@@ -1264,6 +1304,7 @@ def transactions_export(request):
 @login_required
 def transactions_search(request):
     txs = Transaction.objects.select_related("card", "client").order_by("-timestamp")
+    bank_colors = _bank_color_map()
     start_raw = (request.GET.get("start") or "").strip()
     end_raw = (request.GET.get("end") or "").strip()
     start_date = _parse_user_date(start_raw)
@@ -1300,6 +1341,7 @@ def transactions_search(request):
                 "time_iso": tx.timestamp.isoformat(),
                 "client": tx.client.name,
                 "card": _card_display(tx.card),
+                "bank_color": bank_colors.get((tx.card.bank or "").strip(), ""),
                 "rub": _format_spaced_number(tx.amount_rub),
                 "usd": _format_spaced_number(tx.amount_usd),
                 "rate": _format_spaced_number(tx.rate),
@@ -1324,7 +1366,13 @@ def card_add(request):
     return render(
         request,
         "core/card_form.html",
-        {"form": form, "title": "Add Card", "groups": groups, "banks": banks},
+        {
+            "form": form,
+            "title": "Add Card",
+            "groups": groups,
+            "banks": banks,
+            "bank_colors": _bank_color_map(),
+        },
     )
 
 
@@ -1340,7 +1388,13 @@ def card_edit(request, pk: int):
     return render(
         request,
         "core/card_form.html",
-        {"form": form, "title": "Edit Card", "groups": groups, "banks": banks},
+        {
+            "form": form,
+            "title": "Edit Card",
+            "groups": groups,
+            "banks": banks,
+            "bank_colors": _bank_color_map(),
+        },
     )
 
 

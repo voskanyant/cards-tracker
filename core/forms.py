@@ -2,10 +2,21 @@ from django import forms
 from django.utils import timezone
 from datetime import datetime, timezone as dt_timezone
 from decimal import Decimal, InvalidOperation
-from .models import Card, CardGroup, Client, Transaction
+from .models import BankColor, Card, CardGroup, Client, Transaction
 
 
 class CardForm(forms.ModelForm):
+    bank_color = forms.CharField(
+        required=False,
+        label="Bank color",
+        widget=forms.TextInput(
+            attrs={
+                "type": "color",
+                "class": "bank-color-input",
+                "value": "#000000",
+            }
+        ),
+    )
     group_name = forms.CharField(
         required=False,
         label="Group",
@@ -55,12 +66,28 @@ class CardForm(forms.ModelForm):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.order_fields(["name", "bank", "group_name", "card_number", "pin", "status", "notes"])
+        self.order_fields(
+            ["name", "bank", "bank_color", "group_name", "card_number", "pin", "status", "notes"]
+        )
         if not self.is_bound and self.instance.pk and self.instance.group:
             self.fields["group_name"].initial = self.instance.group.name
+        if not self.is_bound:
+            bank = (self.instance.bank or "").strip()
+            if bank:
+                saved = BankColor.objects.filter(bank__iexact=bank).first()
+                if saved:
+                    self.fields["bank_color"].initial = saved.color
 
     def clean_group_name(self):
         return (self.cleaned_data.get("group_name") or "").strip()
+
+    def clean_bank_color(self):
+        color = (self.cleaned_data.get("bank_color") or "").strip()
+        if not color:
+            return ""
+        if not color.startswith("#") or len(color) != 7:
+            raise forms.ValidationError("Enter a valid hex color.")
+        return color
 
     def save(self, commit=True):
         instance = super().save(commit=False)
@@ -71,6 +98,16 @@ class CardForm(forms.ModelForm):
             if not group_obj:
                 group_obj = CardGroup.objects.create(name=group_name)
         instance.group = group_obj
+        bank = (instance.bank or "").strip()
+        color = (self.cleaned_data.get("bank_color") or "").strip()
+        if bank and color:
+            existing = BankColor.objects.filter(bank__iexact=bank).first()
+            if existing:
+                existing.bank = bank
+                existing.color = color
+                existing.save(update_fields=["bank", "color"])
+            else:
+                BankColor.objects.create(bank=bank, color=color)
         if commit:
             instance.save()
             self.save_m2m()

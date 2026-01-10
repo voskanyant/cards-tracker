@@ -141,6 +141,31 @@
     font-size: 0.78rem;
     color: var(--muted);
   }
+  .card-item .received-value {
+    font-size: 0.9rem;
+    font-weight: 600;
+  }
+  .card-item .received-value::before {
+    content: "Received: ";
+    font-weight: 500;
+    color: var(--muted);
+  }
+  @media (max-width: 720px) {
+    .card-item .meta {
+      flex-direction: column;
+      align-items: flex-start;
+      gap: 4px;
+    }
+    .card-item .received-value::before {
+      content: "";
+    }
+    .card-item .received-value {
+      font-size: 0.95rem;
+    }
+    .card-item .meta-details {
+      gap: 6px 12px;
+    }
+  }
   .empty-state {
     font-size: 0.9rem;
     color: var(--muted);
@@ -208,7 +233,7 @@
       <select name="sort">
         <option value="received_desc" {% if sort_filter == "received_desc" %}selected{% endif %}>Received (high to low)</option>
         <option value="received_asc" {% if sort_filter == "received_asc" %}selected{% endif %}>Received (low to high)</option>
-        <option value="name_asc" {% if sort_filter == "name_asc" %}selected{% endif %}>Card name (A–Z)</option>
+        <option value="name_asc" {% if sort_filter == "name_asc" %}selected{% endif %}>Card name (A-Z)</option>
       </select>
     </label>
   </form>
@@ -241,8 +266,10 @@
           {% for row in card_list %}
             <div class="card-item">
               <div class="meta">
-                <span>{{ row.label }}</span>
-                <strong>Received: {{ row.value|spaced_number }} &#8381;</strong>
+                {% with color=row.bank_color %}
+                <span{% if color %} style="color: {{ color }}"{% endif %}>{{ row.label }}</span>
+                {% endwith %}
+                <span class="received-value" data-received="{{ row.value|spaced_number }}">{{ row.value|spaced_number }} &#8381;</span>
               </div>
               <div class="meta-details">
                 <span>Balance: {{ row.balance|spaced_number }} &#8381;</span>
@@ -280,6 +307,12 @@
       return params;
     }
 
+    function cleanValue(raw) {
+      if (!raw) return "0";
+      const cleaned = String(raw).replace(/[^\d\s.,-]/g, "").trim();
+      return cleaned || "0";
+    }
+
     function renderList(listEl, items) {
       if (!listEl) return;
       if (!items.length) {
@@ -289,8 +322,8 @@
       listEl.innerHTML = items.map(item => `
         <div class="card-item">
           <div class="meta">
-            <span>${item.label}</span>
-            <strong>Received: ${item.value} &#8381;</strong>
+            <span${item.bank_color ? ` style="color: ${item.bank_color}"` : ""}>${item.label}</span>
+            <span class="received-value" data-received="${cleanValue(item.value)}">${cleanValue(item.value)} &#8381;</span>
           </div>
           <div class="meta-details">
             <span>Balance: ${item.balance || "0"} \u20BD</span>
@@ -357,6 +390,11 @@
     if (bankSelect) bankSelect.addEventListener("change", scheduleFetch);
     if (sortSelect) sortSelect.addEventListener("change", scheduleFetch);
 
+    document.querySelectorAll(".received-value").forEach(el => {
+      const raw = el.dataset.received || el.textContent || "";
+      const value = cleanValue(raw);
+      el.textContent = `${value} \u20BD`;
+    });
   })();
 </script>
 {% endblock %}

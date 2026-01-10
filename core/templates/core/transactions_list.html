@@ -492,7 +492,15 @@
         <td data-label="Client">{{ t.client.name }}</td>
         <td data-label="RUB &#8381;">{{ t.amount_rub|spaced_number }} &#8381;</td>
         <td data-label="USD $">{{ t.amount_usd|spaced_number }} $</td>
-        <td data-label="Card">{{ t.card_display }}</td>
+          <td data-label="Card">
+            {% with color=bank_colors|dict_get:t.card.bank %}
+              {% if color %}
+                <span style="color: {{ color }}">{{ t.card_display }}</span>
+              {% else %}
+                {{ t.card_display }}
+              {% endif %}
+            {% endwith %}
+          </td>
         <td data-label="Rate &#8381;">{{ t.rate|spaced_number }} &#8381;</td>
           <td data-label="Note" class="{% if not t.notes %}tx-note-empty{% endif %}">
             {% if t.notes %}
@@ -693,6 +701,7 @@
           const id = escapeHtml(tx.id);
           const client = escapeHtml(tx.client);
           const card = escapeHtml(tx.card);
+          const cardColor = escapeHtml(tx.bank_color || "");
           const rub = escapeHtml(tx.rub);
           const usd = escapeHtml(tx.usd);
           const rate = escapeHtml(tx.rate);
@@ -705,7 +714,7 @@
               <td data-label="Client">${client}</td>
               <td data-label="RUB &#8381;">${rub} &#8381;</td>
               <td data-label="USD $">${usd} $</td>
-              <td data-label="Card">${card}</td>
+                <td data-label="Card">${cardColor ? `<span style="color: ${cardColor}">${card}</span>` : card}</td>
               <td data-label="Rate &#8381;">${rate} &#8381;</td>
                 <td data-label="Note" class="${note ? "" : "tx-note-empty"}">
                   ${note ? `<button type="button" class="tx-note-view has-note" data-note="${note}" data-tx-id="${id}">${note}</button>` : ""}
@@ -915,6 +924,7 @@
     let activePreview = null;
     let activeNoteButton = null;
     let activeNoteId = null;
+    let noteScrollY = 0;
     function getCookieValue(name) {
       const match = document.cookie.match(new RegExp("(^|;\\s*)" + name + "=([^;]*)"));
       return match ? decodeURIComponent(match[2]) : "";
@@ -929,12 +939,17 @@
       } else {
         textarea.value = input ? input.value : "";
       }
+      noteScrollY = window.scrollY || document.documentElement.scrollTop || 0;
       textarea.readOnly = Boolean(readOnly);
       if (saveBtn) {
         saveBtn.style.display = readOnly ? "none" : "";
       }
       modal.classList.add("is-open");
       textarea.focus();
+      setTimeout(() => {
+        const maxY = Math.max(0, document.body.scrollHeight - window.innerHeight);
+        window.scrollTo(0, Math.min(noteScrollY, maxY));
+      }, 0);
     }
 
     function closeModal() {
@@ -943,6 +958,10 @@
       activePreview = null;
       activeNoteButton = null;
       activeNoteId = null;
+      requestAnimationFrame(() => {
+        const maxY = Math.max(0, document.body.scrollHeight - window.innerHeight);
+        window.scrollTo(0, Math.min(noteScrollY, maxY));
+      });
     }
 
       document.addEventListener("click", (e) => {

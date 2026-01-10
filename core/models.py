@@ -30,7 +30,15 @@ class Card(models.Model):
                 fields=["name", "bank", "card_number"],
                 name="unique_card_identity",
             )
-        ]
+        ]	
+
+
+class BankColor(models.Model):
+    bank = models.CharField(max_length=80, unique=True)
+    color = models.CharField(max_length=7, default="#000000")
+
+    def __str__(self):
+        return f"{self.bank} ({self.color})"
 
 
 class Client(models.Model):
