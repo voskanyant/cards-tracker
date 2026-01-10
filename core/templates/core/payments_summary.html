@@ -6,6 +6,30 @@
     width: 100%;
     min-width: 0 !important;
   }
+  .payments-table .copyable {
+    cursor: pointer;
+  }
+  .payments-table .copyable:active {
+    opacity: 0.7;
+  }
+  .copy-toast {
+    position: fixed;
+    left: 50%;
+    bottom: 18px;
+    transform: translateX(-50%);
+    background: #111;
+    color: #fff;
+    padding: 6px 12px;
+    border-radius: 999px;
+    font-size: 0.85rem;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.2s ease;
+    z-index: 200;
+  }
+  .copy-toast.is-visible {
+    opacity: 0.9;
+  }
   .payments-filters .search-per-page-row {
     display: grid;
     grid-template-columns: minmax(0, 1fr) minmax(0, 140px);
@@ -132,9 +156,9 @@
         {% for row in rows %}
           <tr>
             <td>{{ row.date|date:"d/m/Y" }}</td>
-            <td>{{ row.client.name }}</td>
-            <td class="num">{{ row.rub|spaced_number }} ₽</td>
-            <td class="num">{{ row.usd|spaced_number }} $</td>
+            <td class="copyable" data-copy="{{ row.client.name }}">{{ row.client.name }}</td>
+            <td class="num copyable" data-copy="{{ row.rub|spaced_number }}">{{ row.rub|spaced_number }} &#8381;</td>
+            <td class="num copyable" data-copy="{{ row.usd|spaced_number }}">{{ row.usd|spaced_number }} $</td>
           </tr>
         {% empty %}
           <tr><td colspan="4">No payments found for the selected range.</td></tr>
@@ -165,6 +189,7 @@
     </div>
   {% endif %}
 </section>
+<div class="copy-toast" id="payments-copy-toast">Copied</div>
 <script>
   (function () {
     const searchInput = document.querySelector("input[name='q']");
@@ -226,9 +251,9 @@
           return `
             <tr>
               <td>${date}</td>
-              <td>${client}</td>
-              <td class="num">${rub} ₽</td>
-              <td class="num">${usd} $</td>
+              <td class="copyable" data-copy="${client}">${client}</td>
+                <td class="num copyable" data-copy="${rub}">${rub} ₽</td>
+                <td class="num copyable" data-copy="${usd}">${usd} $</td>
             </tr>
           `;
         })
@@ -319,4 +344,45 @@
     applyFilters();
   })();
 </script>
+<script>
+  (function () {
+    const table = document.querySelector(".payments-table");
+    const toast = document.getElementById("payments-copy-toast");
+    if (!table) return;
+    let toastTimer = null;
+
+    function copyText(text) {
+      if (!text) return;
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(text).catch(() => {});
+        return;
+      }
+      const textarea = document.createElement("textarea");
+      textarea.value = text;
+      textarea.style.position = "fixed";
+      textarea.style.opacity = "0";
+      document.body.appendChild(textarea);
+      textarea.select();
+      try {
+        document.execCommand("copy");
+      } catch (e) {}
+      textarea.remove();
+    }
+
+    table.addEventListener("click", (event) => {
+      const cell = event.target.closest(".copyable");
+      if (!cell) return;
+      const value = cell.getAttribute("data-copy") || cell.textContent || "";
+      copyText(value.trim());
+      if (toast) {
+        toast.classList.add("is-visible");
+        window.clearTimeout(toastTimer);
+        toastTimer = window.setTimeout(() => {
+          toast.classList.remove("is-visible");
+        }, 900);
+      }
+    });
+  })();
+</script>
+
 {% endblock %}

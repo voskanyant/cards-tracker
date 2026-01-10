@@ -227,7 +227,6 @@
     const tbody = document.querySelector("table tbody");
     const pagination = document.querySelector(".pagination");
     const perPageSelect = document.querySelector("select[name='per_page']");
-    const controls = document.querySelector(".clients-controls");
     const exportLink = document.querySelector("a[href^='/clients/export/']");
     const initialBody = tbody ? tbody.innerHTML : "";
     const initialPagination = pagination ? pagination.innerHTML : "";
@@ -305,16 +304,10 @@
       pagination.style.display = show ? initialPaginationDisplay || "" : "none";
     }
 
-    function toggleControls(show) {
-      if (!controls) return;
-      controls.style.display = show ? "" : "none";
-    }
-
     function restoreInitial() {
       if (tbody) tbody.innerHTML = initialBody;
       if (pagination) pagination.innerHTML = initialPagination;
       togglePagination(true);
-      toggleControls(true);
     }
 
     function applySearch() {
@@ -328,7 +321,6 @@
         return;
       }
       togglePagination(false);
-      toggleControls(false);
       if (controller) controller.abort();
       controller = new AbortController();
       fetch(`/clients/search/?q=${encodeURIComponent(term)}`, { signal: controller.signal })
