@@ -743,8 +743,9 @@
 </head>
 <body>
   <nav>
-    <button type="button" class="menu-toggle" aria-label="Open menu">☰ Menu</button>
+    <button type="button" class="menu-toggle" aria-label="Open menu">&#9776; Menu</button>
     <div class="nav-inner">
+      <a href="/">Dashboard</a>
       <a href="/transactions/">Transactions</a>
       <a href="/withdraw/">Withdraw</a>
       <a href="/payments/">Payments</a>
@@ -773,6 +774,7 @@
       <button type="button" class="menu-toggle" data-drawer-close>Close</button>
     </div>
     <nav class="drawer-links">
+      <a href="/">Dashboard</a>
       <a href="/transactions/">Transactions</a>
       <a href="/withdraw/">Withdraw</a>
       <a href="/payments/">Payments</a>
@@ -1317,7 +1319,12 @@
         const path = window.location.pathname || "";
         document.querySelectorAll("nav a, .drawer-links a").forEach(link => {
           const href = link.getAttribute("href") || "";
-          if (href && path.startsWith(href)) {
+          if (!href) return;
+          if (href === "/") {
+            if (path === "/") link.classList.add("active");
+            return;
+          }
+          if (path.startsWith(href)) {
             link.classList.add("active");
           }
         });

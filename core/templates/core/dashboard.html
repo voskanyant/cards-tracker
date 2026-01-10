@@ -1,5 +1,362 @@
 {% extends "core/base.html" %}
+{% load formatting %}
 {% block content %}
-<h2>Dashboard</h2>
-<p>Next step: add “Add Transaction” form + recent transactions.</p>
+<style>
+  .dashboard-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 12px;
+    margin-bottom: 10px;
+  }
+  .dashboard-title {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+  .dashboard-title p {
+    color: var(--muted);
+    margin: 0;
+    font-size: 0.9rem;
+  }
+  .dashboard-stats {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 12px;
+  }
+  .stat-card {
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 14px;
+    background: var(--surface);
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+  .stat-label {
+    font-size: 0.75rem;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+  .stat-value {
+    font-size: 1.5rem;
+    font-weight: 700;
+  }
+  .stat-sub {
+    font-size: 0.85rem;
+    color: var(--muted);
+  }
+  .dashboard-filters {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    align-items: flex-end;
+    width: 100%;
+  }
+  .dashboard-filters label {
+    display: flex;
+    flex-direction: column;
+  }
+  .dashboard-filters label span {
+    margin-bottom: 6px;
+  }
+  .dashboard-grid {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 16px;
+  }
+  .metric-card {
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 14px;
+    background: var(--surface);
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+  .metric-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 8px;
+  }
+  .metric-header h3 {
+    margin: 0;
+    font-size: 1rem;
+  }
+  .metric-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 10px;
+  }
+  .metric-row span {
+    font-size: 0.9rem;
+  }
+  .metric-row .metric-value {
+    font-weight: 600;
+  }
+  .bar {
+    height: 6px;
+    border-radius: 999px;
+    background: var(--surface-soft);
+    overflow: hidden;
+  }
+  .bar-fill {
+    height: 100%;
+    background: var(--text);
+    border-radius: inherit;
+  }
+  .bar-fill.accent {
+    background: var(--accent);
+  }
+  .card-list {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+  .card-item {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+  .card-item .meta {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    font-size: 0.9rem;
+  }
+  .card-item .meta strong {
+    font-weight: 600;
+  }
+  .card-item .balance {
+    font-size: 0.8rem;
+    color: var(--muted);
+  }
+  .card-item .meta-details {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    font-size: 0.78rem;
+    color: var(--muted);
+  }
+  .empty-state {
+    font-size: 0.9rem;
+    color: var(--muted);
+  }
+  .is-hidden {
+    display: none !important;
+  }
+  @media (max-width: 960px) {
+    .dashboard-stats {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+    .dashboard-grid {
+      grid-template-columns: 1fr;
+    }
+  }
+  @media (max-width: 720px) {
+    .dashboard-stats {
+      grid-template-columns: 1fr;
+    }
+  }
+</style>
+
+<section class="section-card">
+  <div class="dashboard-header">
+    <div class="dashboard-title">
+      <h2 style="margin:0;">Dashboard</h2>
+      <p data-dashboard-label>{{ month_label }}</p>
+    </div>
+    <span class="pill">Overview</span>
+  </div>
+  <form method="get" class="dashboard-filters">
+    <label>
+      <span>From</span>
+      <div class="date-field">
+        <input type="text" name="start" placeholder="dd/mm/yyyy" value="{{ start }}" autocomplete="off" inputmode="numeric" class="date-input js-date-input">
+        <button type="button" class="calendar-toggle" aria-label="Open calendar">&#128197;</button>
+      </div>
+    </label>
+    <label>
+      <span>To</span>
+      <div class="date-field">
+        <input type="text" name="end" placeholder="dd/mm/yyyy" value="{{ end }}" autocomplete="off" inputmode="numeric" class="date-input js-date-input">
+        <button type="button" class="calendar-toggle" aria-label="Open calendar">&#128197;</button>
+      </div>
+    </label>
+    <label style="min-width:160px;">
+      <span>Group</span>
+      <select name="group">
+        <option value="all" {% if group_filter == "all" %}selected{% endif %}>All Cards</option>
+        <option value="our" {% if group_filter == "our" %}selected{% endif %}>Our Cards</option>
+        <option value="clients" {% if group_filter == "clients" %}selected{% endif %}>Client Cards</option>
+      </select>
+    </label>
+    <label style="min-width:180px;">
+      <span>Bank</span>
+      <select name="bank">
+        <option value="">All banks</option>
+        {% for bank in banks %}
+          <option value="{{ bank }}" {% if bank == bank_filter %}selected{% endif %}>{{ bank }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <label style="min-width:180px;">
+      <span>Sort</span>
+      <select name="sort">
+        <option value="received_desc" {% if sort_filter == "received_desc" %}selected{% endif %}>Received (high to low)</option>
+        <option value="received_asc" {% if sort_filter == "received_asc" %}selected{% endif %}>Received (low to high)</option>
+        <option value="name_asc" {% if sort_filter == "name_asc" %}selected{% endif %}>Card name (A–Z)</option>
+      </select>
+    </label>
+  </form>
+  <div class="dashboard-stats" style="margin-top:16px;">
+    <div class="stat-card">
+      <div class="stat-label">Total Balance</div>
+      <div class="stat-value"><span data-dashboard-value="total-balance">{{ total_balance|spaced_number }}</span> &#8381;</div>
+      <div class="stat-sub">All cards combined</div>
+    </div>
+    <div class="stat-card" data-section="our">
+      <div class="stat-label">Our Cards Balance</div>
+      <div class="stat-value"><span data-dashboard-value="our-balance">{{ balances.our|spaced_number }}</span> &#8381;</div>
+      <div class="stat-sub">Current on cards</div>
+    </div>
+    <div class="stat-card" data-section="clients">
+      <div class="stat-label">Client Cards Balance</div>
+      <div class="stat-value"><span data-dashboard-value="clients-balance">{{ balances.clients|spaced_number }}</span> &#8381;</div>
+      <div class="stat-sub">Current on cards</div>
+    </div>
+  </div>
+</section>
+
+<section class="dashboard-grid">
+  <div class="metric-card">
+      <div class="metric-header">
+        <h3>Cards</h3>
+      </div>
+      <div class="card-list" data-dashboard-list="cards">
+        {% if card_list %}
+          {% for row in card_list %}
+            <div class="card-item">
+              <div class="meta">
+                <span>{{ row.label }}</span>
+                <strong>Received: {{ row.value|spaced_number }} &#8381;</strong>
+              </div>
+              <div class="meta-details">
+                <span>Balance: {{ row.balance|spaced_number }} &#8381;</span>
+                <span>Withdrawn: {{ row.withdrawn|spaced_number }} &#8381;</span>
+                <span>Commission: {{ row.commission|spaced_number }} &#8381;</span>
+              </div>
+              <div class="bar"><div class="bar-fill" style="width: {{ row.pct }}%;"></div></div>
+            </div>
+          {% endfor %}
+        {% else %}
+          <div class="empty-state">No transactions for this period.</div>
+        {% endif %}
+      </div>
+  </div>
+</section>
+
+<script>
+  (function () {
+    const form = document.querySelector(".dashboard-filters");
+    if (!form) return;
+    const startInput = form.querySelector("input[name='start']");
+    const endInput = form.querySelector("input[name='end']");
+    const groupSelect = form.querySelector("select[name='group']");
+    const bankSelect = form.querySelector("select[name='bank']");
+    const sortSelect = form.querySelector("select[name='sort']");
+    let timer = null;
+
+    function paramsFromForm() {
+      const params = new URLSearchParams();
+      if (startInput && startInput.value.trim()) params.set("start", startInput.value.trim());
+      if (endInput && endInput.value.trim()) params.set("end", endInput.value.trim());
+      if (groupSelect && groupSelect.value) params.set("group", groupSelect.value);
+      if (bankSelect && bankSelect.value) params.set("bank", bankSelect.value);
+      if (sortSelect && sortSelect.value) params.set("sort", sortSelect.value);
+      return params;
+    }
+
+    function renderList(listEl, items) {
+      if (!listEl) return;
+      if (!items.length) {
+        listEl.innerHTML = "<div class=\"empty-state\">No transactions for this period.</div>";
+        return;
+      }
+      listEl.innerHTML = items.map(item => `
+        <div class="card-item">
+          <div class="meta">
+            <span>${item.label}</span>
+            <strong>Received: ${item.value} &#8381;</strong>
+          </div>
+          <div class="meta-details">
+            <span>Balance: ${item.balance || "0"} \u20BD</span>
+            <span>Withdrawn: ${item.withdrawn || "0"} \u20BD</span>
+            <span>Commission: ${item.commission || "0"} \u20BD</span>
+          </div>
+          <div class="bar"><div class="bar-fill" style="width: ${item.pct}%;"></div></div>
+        </div>
+      `).join("");
+    }
+
+    function applyData(data) {
+      const label = document.querySelector("[data-dashboard-label]");
+      if (label) label.textContent = data.month_label || "";
+
+      const map = {
+        "total-balance": data.total_balance,
+        "our-balance": data.balances?.our,
+        "clients-balance": data.balances?.clients,
+        "summary-received": data.summary_totals?.received,
+        "summary-withdrawn": data.summary_totals?.withdrawn,
+        "summary-commission": data.summary_totals?.commission
+      };
+      Object.entries(map).forEach(([key, value]) => {
+        const el = document.querySelector(`[data-dashboard-value='${key}']`);
+        if (el) el.textContent = value || "0";
+      });
+
+      renderList(document.querySelector("[data-dashboard-list='cards']"), data.card_list || []);
+    }
+
+    function fetchData() {
+      const params = paramsFromForm();
+      const url = `/dashboard/data/?${params.toString()}`;
+      fetch(url)
+        .then(resp => resp.ok ? resp.json() : null)
+        .then(data => {
+          if (!data) return;
+          applyData(data);
+          const nextUrl = params.toString() ? `/dashboard/?${params.toString()}` : "/dashboard/";
+          window.history.replaceState({}, "", nextUrl);
+        })
+        .catch(() => {});
+    }
+
+    function scheduleFetch() {
+      window.clearTimeout(timer);
+      timer = window.setTimeout(fetchData, 150);
+    }
+
+    if (startInput) {
+      startInput.addEventListener("change", scheduleFetch);
+      startInput.addEventListener("input", () => {
+        if (!startInput.value.trim()) scheduleFetch();
+      });
+    }
+    if (endInput) {
+      endInput.addEventListener("change", scheduleFetch);
+      endInput.addEventListener("input", () => {
+        if (!endInput.value.trim()) scheduleFetch();
+      });
+    }
+    if (groupSelect) groupSelect.addEventListener("change", scheduleFetch);
+    if (bankSelect) bankSelect.addEventListener("change", scheduleFetch);
+    if (sortSelect) sortSelect.addEventListener("change", scheduleFetch);
+
+  })();
+</script>
 {% endblock %}

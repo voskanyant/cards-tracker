@@ -2,7 +2,9 @@ from django.urls import path
 from . import views
 
 urlpatterns = [
-    path("", views.transactions_list, name="root_transactions"),
+    path("", views.dashboard, name="dashboard"),
+    path("dashboard/", views.dashboard, name="dashboard"),
+    path("dashboard/data/", views.dashboard_data, name="dashboard_data"),
 
     path("cards/", views.cards_list, name="cards_list"),
     path("cards/export/", views.cards_export, name="cards_export"),

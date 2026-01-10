@@ -8,6 +8,7 @@ from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.paginator import Paginator
 from django.db.models import Sum, Q
+from django.db.models.functions import Coalesce
 from django.db.models.deletion import ProtectedError
 from django.shortcuts import render
 from django.utils.dateparse import parse_date
@@ -480,6 +481,228 @@ def _card_events(card: Card, start_date: date | None, end_date: date | None, kin
         event["balance"] = running
     events.reverse()
     return events
+
+
+def _card_bucket(card: Card) -> str:
+    group_name = ""
+    if card.group and card.group.name:
+        group_name = card.group.name.strip().lower()
+    if "our" in group_name:
+        return "our"
+    return "clients"
+
+
+def _dashboard_payload(request):
+    today = timezone.localdate()
+    month_start = today.replace(day=1)
+    if month_start.month == 12:
+        month_next = date(month_start.year + 1, 1, 1)
+    else:
+        month_next = date(month_start.year, month_start.month + 1, 1)
+
+    start_raw = (request.GET.get("start") or "").strip()
+    end_raw = (request.GET.get("end") or "").strip()
+    start_date = _parse_user_date(start_raw)
+    end_date = _parse_user_date(end_raw)
+
+    if not start_date and not end_date:
+        period_start = month_start
+        period_end = month_next - timedelta(days=1)
+        period_label = month_start.strftime("%B %Y")
+    else:
+        if not start_date and end_date:
+            start_date = end_date.replace(day=1)
+        if start_date and not end_date:
+            end_date = today
+        period_start = start_date or month_start
+        period_end = end_date or today
+        period_label = f"{_format_user_date(period_start)} - {_format_user_date(period_end)}"
+
+    if start_date:
+        start_raw = _format_user_date(start_date)
+    if end_date:
+        end_raw = _format_user_date(end_date)
+
+    end_exclusive = (period_end + timedelta(days=1)) if period_end else month_next
+
+    group_filter = (request.GET.get("group") or "our").strip().lower()
+    if group_filter not in ("all", "our", "clients"):
+        group_filter = "our"
+    bank_filter = (request.GET.get("bank") or "").strip()
+    sort_filter = (request.GET.get("sort") or "received_desc").strip().lower()
+    if sort_filter not in ("received_desc", "received_asc", "name_asc"):
+        sort_filter = "received_desc"
+
+    cards = Card.objects.select_related("group").order_by("name")
+    if bank_filter:
+        cards = cards.filter(bank__iexact=bank_filter)
+    cards_list, overall = _cards_with_totals(cards)
+
+    balances = {"our": Decimal("0"), "clients": Decimal("0")}
+    for card in cards_list:
+        balances[_card_bucket(card)] += card.balance_total
+
+    monthly_received = (
+        Transaction.objects.filter(
+            timestamp__date__gte=period_start,
+            timestamp__date__lt=end_exclusive,
+            card__in=cards_list,
+        )
+        .values("card_id")
+        .annotate(total=Coalesce(Sum("amount_rub"), Decimal("0")))
+    )
+    card_map = {card.id: card for card in cards_list}
+    received_by_card = {row["card_id"]: row["total"] or Decimal("0") for row in monthly_received}
+    monthly_cards = {"our": [], "clients": []}
+    monthly_totals = {
+        "our": {"received": Decimal("0"), "withdrawn": Decimal("0"), "commission": Decimal("0")},
+        "clients": {"received": Decimal("0"), "withdrawn": Decimal("0"), "commission": Decimal("0")},
+    }
+
+    for card in cards_list:
+        bucket = _card_bucket(card)
+        value = received_by_card.get(card.id, Decimal("0"))
+        monthly_totals[bucket]["received"] += value
+        monthly_cards[bucket].append(
+            {
+                "id": card.id,
+                "label": _card_display(card),
+                "value": value,
+                "balance": card.balance_total,
+            }
+        )
+
+    cache = {}
+    month_withdrawals = _dedupe_withdrawals_by_date(
+        Withdrawal.objects.filter(date__gte=period_start, date__lt=end_exclusive, card__in=cards_list).select_related("card")
+    )
+    withdraw_by_card = defaultdict(lambda: {"withdrawn": Decimal("0"), "commission": Decimal("0")})
+    for wd in month_withdrawals:
+        bucket = _card_bucket(wd.card)
+        actual = _withdrawal_actual_amount(wd, cache)
+        commission = wd.commission_rub or Decimal("0")
+        monthly_totals[bucket]["withdrawn"] += actual
+        monthly_totals[bucket]["commission"] += commission
+        withdraw_by_card[wd.card_id]["withdrawn"] += actual
+        withdraw_by_card[wd.card_id]["commission"] += commission
+
+    for bucket in ("our", "clients"):
+        monthly_cards[bucket].sort(key=lambda row: row["value"], reverse=True)
+
+    def pct(value, max_value):
+        if not max_value:
+            return 0
+        try:
+            value = Decimal(value)
+        except Exception:
+            return 0
+        if max_value <= 0:
+            return 0
+        return int((value / max_value) * 100)
+
+    if group_filter == "our":
+        selected_totals = monthly_totals["our"]
+        selected_cards = monthly_cards["our"]
+    elif group_filter == "clients":
+        selected_totals = monthly_totals["clients"]
+        selected_cards = monthly_cards["clients"]
+    else:
+        selected_totals = {
+            "received": monthly_totals["our"]["received"] + monthly_totals["clients"]["received"],
+            "withdrawn": monthly_totals["our"]["withdrawn"] + monthly_totals["clients"]["withdrawn"],
+            "commission": monthly_totals["our"]["commission"] + monthly_totals["clients"]["commission"],
+        }
+        selected_cards = monthly_cards["our"] + monthly_cards["clients"]
+        selected_cards.sort(key=lambda row: row["value"], reverse=True)
+
+    if sort_filter == "received_asc":
+        selected_cards.sort(key=lambda row: row["value"])
+    elif sort_filter == "name_asc":
+        selected_cards.sort(key=lambda row: row["label"].lower())
+    else:
+        selected_cards.sort(key=lambda row: row["value"], reverse=True)
+
+    summary_max = max(
+        selected_totals["received"],
+        selected_totals["withdrawn"],
+        selected_totals["commission"],
+        Decimal("0"),
+    )
+    summary_pct = {
+        "received": pct(selected_totals["received"], summary_max),
+        "withdrawn": pct(selected_totals["withdrawn"], summary_max),
+        "commission": pct(selected_totals["commission"], summary_max),
+    }
+
+    max_card_value = max([row["value"] for row in selected_cards] or [Decimal("0")])
+    card_list = []
+    for row in selected_cards:
+        wd = withdraw_by_card.get(row.get("id"), {"withdrawn": Decimal("0"), "commission": Decimal("0")})
+        card_list.append(
+            {
+                "label": row["label"],
+                "value": row["value"],
+                "pct": pct(row["value"], max_card_value),
+                "balance": row.get("balance", Decimal("0")),
+                "withdrawn": wd["withdrawn"],
+                "commission": wd["commission"],
+            }
+        )
+
+    context = {
+        "month_label": period_label,
+        "start": start_raw,
+        "end": end_raw,
+        "group_filter": group_filter,
+        "bank_filter": bank_filter,
+        "sort_filter": sort_filter,
+        "total_balance": overall["balance"],
+        "balances": balances,
+        "summary_totals": selected_totals,
+        "summary_pct": summary_pct,
+        "card_list": card_list,
+    }
+
+    payload = {
+        "month_label": period_label,
+        "total_balance": _format_spaced_number(overall["balance"]),
+        "balances": {
+            "our": _format_spaced_number(balances["our"]),
+            "clients": _format_spaced_number(balances["clients"]),
+        },
+        "summary_totals": {
+            "received": _format_spaced_number(selected_totals["received"]),
+            "withdrawn": _format_spaced_number(selected_totals["withdrawn"]),
+            "commission": _format_spaced_number(selected_totals["commission"]),
+        },
+        "summary_pct": summary_pct,
+        "card_list": [
+            {
+                "label": row["label"],
+                "value": _format_spaced_number(row["value"]),
+                "pct": row["pct"],
+                "balance": _format_spaced_number(row["balance"]),
+                "withdrawn": _format_spaced_number(row["withdrawn"]),
+                "commission": _format_spaced_number(row["commission"]),
+            }
+            for row in card_list
+        ],
+    }
+
+    return context, payload
+
+
+@login_required
+def dashboard(request):
+    context, _ = _dashboard_payload(request)
+    context["banks"] = _bank_name_list()
+    return render(request, "core/dashboard.html", context)
+
+
+@login_required
+def dashboard_data(request):
+    _, payload = _dashboard_payload(request)
+    return JsonResponse(payload)
 
 
 @login_required
