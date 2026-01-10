@@ -716,7 +716,7 @@
 		if (!intPart) return sign ? "-" : "";
 		const grouped = intPart.replace(/\B(?=(\d{3})+(?!\d))/g, " ");
 		if (parts.length > 1) {
-		  const frac = parts[1].replace(/\D/g, "");
+		  const frac = parts[1].replace(/\D/g, "").replace(/0+$/, "");
 		  return frac ? `${sign}${grouped}.${frac}` : `${sign}${grouped}`;
 		}
 		return `${sign}${grouped}`;

@@ -2,6 +2,9 @@
 {% load formatting %}
 {% block content %}
 <style>
+  .cards-mobile-totals {
+    display: none;
+  }
   .add-card-toggle {
     display: none;
     align-items: center;
@@ -115,6 +118,32 @@
     .cards-table td:nth-child(10)::before {
       content: "";
       margin-bottom: 0;
+    }
+    .cards-totals-table thead,
+    .cards-totals-table tbody {
+      display: none;
+    }
+    .cards-mobile-totals {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 10px 12px;
+      padding: 12px;
+      border-top: 1px solid var(--border);
+    }
+    .cards-mobile-totals .totals-title {
+      grid-column: 1 / -1;
+      font-weight: 700;
+      margin-bottom: 2px;
+    }
+    .cards-mobile-totals .totals-label {
+      font-size: 0.75rem;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+    .cards-mobile-totals .totals-value {
+      text-align: right;
+      font-weight: 600;
     }
   }
   .add-card-body .card-notes-field {
@@ -327,20 +356,31 @@
     </div>
   {% endif %}
 
-  <div class="table-card" style="margin-top:16px;">
+  <div class="table-card cards-totals-table" style="margin-top:16px;">
     <table>
       <thead>
         <tr><th>Total Received</th><th>Total Withdrawn</th><th>Total Commission</th><th>Balance</th></tr>
       </thead>
       <tbody class="cards-totals-body">
         <tr>
-          <td data-total="received">{{ overall.received|spaced_number }} ₽</td>
-          <td data-total="withdrawn">{{ overall.withdrawn|spaced_number }} ₽</td>
-          <td data-total="commission">{{ overall.commission|spaced_number }} ₽</td>
-          <td data-total="balance">{{ overall.balance|spaced_number }} ₽</td>
+          <td data-total="received">{{ overall.received|spaced_number }} &#8381;</td>
+          <td data-total="withdrawn">{{ overall.withdrawn|spaced_number }} &#8381;</td>
+          <td data-total="commission">{{ overall.commission|spaced_number }} &#8381;</td>
+          <td data-total="balance">{{ overall.balance|spaced_number }} &#8381;</td>
         </tr>
       </tbody>
     </table>
+    <div class="cards-mobile-totals">
+      <div class="totals-title">Totals</div>
+      <div class="totals-label">Total Received</div>
+      <div class="totals-value"><span data-total="received">{{ overall.received|spaced_number }}</span> &#8381;</div>
+      <div class="totals-label">Total Withdrawn</div>
+      <div class="totals-value"><span data-total="withdrawn">{{ overall.withdrawn|spaced_number }}</span> &#8381;</div>
+      <div class="totals-label">Total Commission</div>
+      <div class="totals-value"><span data-total="commission">{{ overall.commission|spaced_number }}</span> &#8381;</div>
+      <div class="totals-label">Total Balance</div>
+      <div class="totals-value"><span data-total="balance">{{ overall.balance|spaced_number }}</span> &#8381;</div>
+    </div>
   </div>
 </section>
 <script>
@@ -405,15 +445,26 @@
     }
 
     function renderTotals(totals) {
-      if (!totalsBody || !totals) return;
-      const received = totalsBody.querySelector("[data-total='received']");
-      const withdrawn = totalsBody.querySelector("[data-total='withdrawn']");
-      const commission = totalsBody.querySelector("[data-total='commission']");
-      const balance = totalsBody.querySelector("[data-total='balance']");
-      if (received) received.textContent = totals.received ? `${totals.received} ₽` : "";
-      if (withdrawn) withdrawn.textContent = totals.withdrawn ? `${totals.withdrawn} ₽` : "";
-      if (commission) commission.textContent = totals.commission ? `${totals.commission} ₽` : "";
-      if (balance) balance.textContent = totals.balance ? `${totals.balance} ₽` : "";
+      if (!totals) return;
+      const mapValue = (value, el) => {
+        if (!value) return "";
+        if (el.tagName === "SPAN") {
+          return value;
+        }
+        return `${value} ?`;
+      };
+      document.querySelectorAll("[data-total='received']").forEach(el => {
+        el.textContent = mapValue(totals.received, el);
+      });
+      document.querySelectorAll("[data-total='withdrawn']").forEach(el => {
+        el.textContent = mapValue(totals.withdrawn, el);
+      });
+      document.querySelectorAll("[data-total='commission']").forEach(el => {
+        el.textContent = mapValue(totals.commission, el);
+      });
+      document.querySelectorAll("[data-total='balance']").forEach(el => {
+        el.textContent = mapValue(totals.balance, el);
+      });
     }
 
     function renderRows(items) {

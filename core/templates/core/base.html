@@ -5,23 +5,24 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Cards Tracker</title>
   <style>
-    @import url("https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&display=swap");
+    @import url("https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700&display=swap");
     :root {
-      --bg: #f7f7f7;
+      --bg: #f6f6f6;
       --surface: #ffffff;
-      --surface-soft: #fafafa;
-      --text: #0b0b0b;
-      --muted: #6c6c6c;
-      --primary: #0b0b0b;
+      --surface-soft: #f9f9f9;
+      --text: #111111;
+      --muted: #6f6f6f;
+      --primary: #111111;
       --primary-dark: #000000;
-      --border: #e6e6e6;
-      --radius: 8px;
-      --radius-sm: 6px;
+      --accent: #d63732;
+      --border: #e3e3e3;
+      --radius: 10px;
+      --radius-sm: 8px;
       --shadow: none;
     }
     * { box-sizing: border-box; }
     body {
-      font-family: "IBM Plex Sans", "Segoe UI", sans-serif;
+      font-family: "Manrope", "Segoe UI", sans-serif;
       margin: 0;
       background: var(--bg);
       color: var(--text);
@@ -32,7 +33,7 @@
     nav {
       background: var(--surface);
       border-bottom: 1px solid var(--border);
-      padding: 10px 14px;
+      padding: 12px 16px;
       position: sticky;
       top: 0;
       z-index: 10;
@@ -43,42 +44,42 @@
       background: #fff;
       color: var(--text);
       border-radius: 10px;
-      padding: 8px 10px;
+      padding: 10px 12px;
       cursor: pointer;
       font-weight: 600;
     }
     nav .nav-inner {
       display: flex;
       flex-wrap: wrap;
-      gap: 8px;
+      gap: 10px;
       align-items: center;
       justify-content: center;
     }
     nav a {
       color: var(--muted);
       text-decoration: none;
-      padding: 6px 10px;
+      padding: 6px 12px;
       border-radius: 999px;
       font-weight: 600;
       transition: color 0.2s, background 0.2s;
     }
     nav a:hover {
       color: var(--primary);
-      background: #efefef;
+      background: #f0f0f0;
     }
     nav a.active {
       color: var(--primary);
-      background: #ececec;
+      background: #ededed;
     }
     main {
-      padding: 14px;
+      padding: 16px;
     }
     .page {
       max-width: 1080px;
       margin: 0 auto;
       display: flex;
       flex-direction: column;
-      gap: 16px;
+      gap: 18px;
     }
     .flash-stack {
       display: flex;
@@ -102,7 +103,7 @@
     h1, h2, h3 {
       margin: 0 0 6px;
       font-weight: 700;
-      letter-spacing: -0.01em;
+      letter-spacing: -0.015em;
     }
     p {
       margin: 0 0 12px;
@@ -111,7 +112,7 @@
       background: var(--surface);
       border-radius: var(--radius);
       border: 1px solid var(--border);
-      padding: 14px;
+      padding: 16px;
       box-shadow: var(--shadow);
     }
     .form-grid {
@@ -120,10 +121,10 @@
       gap: 16px;
     }
     .notes-field {
-      border: 1px dashed var(--border);
+      border: 1px solid var(--border);
       border-radius: var(--radius);
       padding: 12px;
-      background: #f8fafc;
+      background: #ffffff;
       display: flex;
       flex-direction: column;
       gap: 8px;
@@ -178,7 +179,7 @@
       border: 1px dashed transparent;
       padding: 4px 6px;
       border-radius: 8px;
-      background: #f8fafc;
+      background: var(--surface-soft);
     }
     .note-cell.has-note .note-preview {
       color: var(--text);
@@ -187,7 +188,7 @@
     }
     .note-trigger {
       border: none;
-      background: #f0f0f0;
+      background: var(--surface-soft);
       border-radius: 999px;
       font-size: 0.75rem;
       padding: 3px 8px;
@@ -322,7 +323,7 @@
       border: none;
       border-radius: 8px;
       padding: 6px 0;
-      background: #f8fafc;
+      background: var(--surface-soft);
       cursor: pointer;
       font-size: 0.85rem;
       color: var(--text);
@@ -362,7 +363,7 @@
       cursor: pointer;
     }
     .calendar-actions button[data-action="clear"] {
-      background: #f3f4f6;
+      background: var(--surface-soft);
     }
     .calendar-actions button[data-action="apply"] {
       background: var(--primary);
@@ -380,10 +381,11 @@
     input, select, textarea {
       border: 1px solid var(--border);
       border-radius: var(--radius-sm);
-      padding: 8px 10px;
-      background: var(--surface-soft);
+      padding: 10px 12px;
+      background: #ffffff;
       transition: border 0.2s, box-shadow 0.2s;
       width: 100%;
+      min-height: 44px;
     }
     input:focus, select:focus, textarea:focus {
       outline: none;
@@ -395,10 +397,23 @@
       border-radius: var(--radius-sm);
       background: var(--primary);
       color: #fff;
-      padding: 8px 14px;
+      padding: 10px 16px;
+      min-height: 44px;
       font-weight: 600;
       cursor: pointer;
       transition: background 0.2s;
+    }
+    .menu-toggle,
+    .notes-trigger,
+    .note-trigger,
+    .tx-note-trigger,
+    .tx-note-view,
+    .calendar-header button,
+    .calendar-grid button,
+    .calendar-actions button,
+    .combo-dropdown button {
+      min-height: 0;
+      height: auto;
     }
     button:hover {
       background: var(--primary-dark);
@@ -426,8 +441,22 @@
       min-width: 640px;
     }
     th, td {
-      padding: 8px 10px;
+      padding: 10px 12px;
       border-bottom: 1px solid var(--border);
+    }
+    th {
+      font-size: 0.75rem;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      color: var(--muted);
+    }
+    a {
+      color: var(--text);
+      text-decoration: none;
+    }
+    a:hover {
+      text-decoration: underline;
+      color: var(--accent);
     }
     th {
       background: var(--surface-soft);
@@ -445,8 +474,8 @@
       background: rgba(15,23,42,0.02);
     }
     tfoot td {
-      background:#f8fafc;
-      font-weight:bold;
+      background: var(--surface-soft);
+      font-weight: bold;
     }
     th[data-sort-dir="asc"]::after { content:" ^"; font-size:11px; color:#555; }
     th[data-sort-dir="desc"]::after { content:" v"; font-size:11px; color:#555; }
@@ -590,6 +619,7 @@
       display: flex;
       flex-direction: column;
       gap: 10px;
+      box-shadow: 8px 0 24px rgba(0, 0, 0, 0.08);
     }
     .side-drawer.is-open {
       transform: translateX(0);
@@ -614,8 +644,8 @@
       border-radius: 10px;
     }
     .side-drawer .drawer-links a.active {
-      background: rgba(0,102,255,0.12);
-      color: var(--primary);
+      background: #ededed;
+      color: var(--text);
     }
     .drawer-backdrop {
       position: fixed;

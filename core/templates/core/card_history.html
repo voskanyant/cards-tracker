@@ -2,6 +2,9 @@
 {% load formatting %}
 {% block content %}
 <style>
+  .mobile-history-totals {
+    display: none;
+  }
   @media (max-width: 720px) {
     .card-history-table {
       width: 100%;
@@ -56,8 +59,21 @@
     .card-history-table td:nth-child(7) { grid-area: fee; color: var(--muted); font-size: 0.9rem; }
     .card-history-table td:nth-child(8) { grid-area: balance; color: var(--muted); font-size: 0.9rem; }
     .card-history-table td:nth-child(9) { grid-area: note; }
-    .card-history-table td:nth-child(2)::before {
+    .card-history-table td:nth-child(2),
+    .card-history-table td:nth-child(5),
+    .card-history-table td:nth-child(7),
+    .card-history-table td:nth-child(9) {
       text-align: right;
+    }
+    .card-history-table td:nth-child(2)::before,
+    .card-history-table td:nth-child(5)::before,
+    .card-history-table td:nth-child(7)::before,
+    .card-history-table td:nth-child(9)::before {
+      text-align: right;
+    }
+    .card-history-table td:nth-child(8),
+    .card-history-table td:nth-child(8)::before {
+      text-align: left;
     }
     .card-history-totals thead,
     .card-history-totals tbody {
