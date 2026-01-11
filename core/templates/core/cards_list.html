@@ -202,6 +202,13 @@
     font-size: 0.85rem;
     color: var(--muted);
   }
+  .card-inactive {
+    opacity: 0.5;
+  }
+  .card-inactive td,
+  .card-inactive a {
+    color: var(--muted);
+  }
   .cards-zero-toggle input[type="checkbox"] {
     width: 16px;
     height: 16px;
@@ -379,7 +386,7 @@
       </thead>
       <tbody>
         {% for c in page_obj %}
-          <tr>
+          <tr class="{% if c.status != 'active' %}card-inactive{% endif %}">
             <td data-label="Name">{{ c.name }}</td>
             <td data-label="Bank">{{ c.bank }}</td>
             <td data-label="Group">{% if c.group %}{{ c.group.name }}{% else %}-{% endif %}</td>
@@ -565,8 +572,9 @@
           const withdrawn = escapeHtml(card.withdrawn);
           const commission = escapeHtml(card.commission);
           const balance = escapeHtml(card.balance);
+          const rowClass = card.status && card.status !== "active" ? "card-inactive" : "";
           return `
-            <tr>
+            <tr class="${rowClass}">
               <td data-label="Name">${name}</td>
               <td data-label="Bank">${bank}</td>
               <td data-label="Group">${group || "-"}</td>

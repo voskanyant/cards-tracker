@@ -577,6 +577,7 @@ def _dashboard_payload(request):
                 "value": value,
                 "balance": card.balance_total,
                 "bank": (card.bank or "").strip(),
+                "status": card.status,
             }
         )
 
@@ -642,9 +643,10 @@ def _dashboard_payload(request):
         "commission": pct(selected_totals["commission"], summary_max),
     }
 
-    max_card_value = max([row["value"] for row in selected_cards] or [Decimal("0")])
+    active_cards = [row for row in selected_cards if row.get("status") == "active"]
+    max_card_value = max([row["value"] for row in active_cards] or [Decimal("0")])
     card_list = []
-    for row in selected_cards:
+    for row in active_cards:
         wd = withdraw_by_card.get(row.get("id"), {"withdrawn": Decimal("0"), "commission": Decimal("0")})
         card_list.append(
             {
@@ -1102,6 +1104,7 @@ def cards_search(request):
                 "withdrawn": _format_spaced_number(card.withdrawn_total),
                 "commission": _format_spaced_number(card.commission_total),
                 "balance": _format_spaced_number(card.balance_total),
+                "status": card.status,
             }
         )
     totals = {
