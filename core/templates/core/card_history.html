@@ -222,6 +222,7 @@
     <div class="note-modal-actions">
       <div></div>
       <div class="note-modal-actions-right">
+        <button type="button" data-withdraw-time-action="delete" class="danger">Delete</button>
         <button type="button" data-withdraw-time-action="cancel">Cancel</button>
         <button type="button" data-withdraw-time-action="save" class="primary">Save</button>
       </div>
@@ -245,6 +246,7 @@
     const timeInput = document.getElementById("withdraw-time-input");
     const timeSave = timeModal?.querySelector("[data-withdraw-time-action='save']");
     const timeCancel = timeModal?.querySelector("[data-withdraw-time-action='cancel']");
+    const timeDelete = timeModal?.querySelector("[data-withdraw-time-action='delete']");
     let activeWithdrawId = null;
 
     function escapeHtml(value) {
@@ -265,6 +267,11 @@
         }
       }
       return new Date().getTimezoneOffset();
+    }
+
+    function readCsrfToken() {
+      const match = document.cookie.match(/(?:^|; )csrftoken=([^;]+)/);
+      return match ? decodeURIComponent(match[1]) : "";
     }
 
     function openTimeModal(id, value, isoValue) {
@@ -438,6 +445,22 @@
       activeWithdrawId = null;
       timeModal?.classList.remove("is-open");
     });
+    timeDelete?.addEventListener("click", () => {
+      if (!activeWithdrawId) return;
+      const ok = window.confirm("Delete this withdrawal?");
+      if (!ok) return;
+      const csrf = readCsrfToken();
+      fetch(`/withdraw/${activeWithdrawId}/delete/`, {
+        method: "POST",
+        headers: { "X-CSRFToken": csrf }
+      }).then(resp => {
+        if (resp.ok) {
+          activeWithdrawId = null;
+          timeModal?.classList.remove("is-open");
+          applyFilters(true);
+        }
+      });
+    });
     timeModal?.addEventListener("click", (e) => {
       if (e.target === timeModal) {
         activeWithdrawId = null;
@@ -453,7 +476,7 @@
       const formData = new FormData();
       formData.append("timestamp", ts);
       formData.append("tz_offset", offset);
-      const csrf = (document.cookie.match(/csrftoken=([^;]+)/) || [])[1] || "";
+      const csrf = readCsrfToken();
       fetch(`/withdraw/${activeWithdrawId}/timestamp/`, {
         method: "POST",
         headers: { "X-CSRFToken": csrf },

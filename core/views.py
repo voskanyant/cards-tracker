@@ -7,7 +7,7 @@ import json
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.paginator import Paginator
-from django.db.models import Sum, Q
+from django.db.models import Sum, Q, Max
 from django.db.models.functions import Coalesce
 from django.db.models.deletion import ProtectedError
 from django.shortcuts import render
@@ -902,6 +902,14 @@ def withdraw_update_time(request, pk: int):
 
 
 @login_required
+@require_POST
+def withdraw_delete(request, pk: int):
+    wd = get_object_or_404(Withdrawal, pk=pk)
+    wd.delete()
+    return JsonResponse({"ok": True})
+
+
+@login_required
 def cards_list(request):
     total_cards = Card.objects.count()
     cards = Card.objects.select_related("group").all().order_by("name")
@@ -1249,6 +1257,18 @@ def transactions_list(request):
     page_obj = paginator.get_page(page_number)
     for tx in page_obj:
         tx.card_display = _card_display(tx.card)
+    card_ids = {tx.card_id for tx in page_obj}
+    last_withdrawals = {}
+    if card_ids:
+        last_withdrawals = {
+            row["card_id"]: row["last_ts"]
+            for row in Withdrawal.objects.filter(card_id__in=card_ids)
+            .values("card_id")
+            .annotate(last_ts=Max("timestamp"))
+        }
+    for tx in page_obj:
+        last_ts = last_withdrawals.get(tx.card_id)
+        tx.has_withdrawals_after = bool(last_ts and last_ts >= tx.timestamp)
 
     context = {
         "page_obj": page_obj,
@@ -1336,8 +1356,20 @@ def transactions_search(request):
         paginator = None
         page_obj = None
 
+    tx_list = list(txs)
+    card_ids = {tx.card_id for tx in tx_list}
+    last_withdrawals = {}
+    if card_ids:
+        last_withdrawals = {
+            row["card_id"]: row["last_ts"]
+            for row in Withdrawal.objects.filter(card_id__in=card_ids)
+            .values("card_id")
+            .annotate(last_ts=Max("timestamp"))
+        }
     data = []
-    for tx in txs:
+    for tx in tx_list:
+        last_ts = last_withdrawals.get(tx.card_id)
+        has_withdrawals_after = bool(last_ts and last_ts >= tx.timestamp)
         data.append(
             {
                 "id": tx.id,
@@ -1349,6 +1381,7 @@ def transactions_search(request):
                 "usd": _format_spaced_number(tx.amount_usd),
                 "rate": _format_spaced_number(tx.rate),
                 "note": tx.notes or "",
+                "has_withdrawals_after": has_withdrawals_after,
             }
         )
     payload = {"results": data}
@@ -1514,6 +1547,13 @@ def transaction_delete(request, pk: int):
     next_url = request.POST.get("next") or request.META.get("HTTP_REFERER") or reverse("transactions_list")
     if not next_url or not next_url.startswith("/"):
         next_url = reverse("transactions_list")
+    has_withdrawals = Withdrawal.objects.filter(card=tx.card, timestamp__gte=tx.timestamp).exists()
+    if has_withdrawals and request.POST.get("confirm_withdrawals") != "1":
+        messages.error(
+            request,
+            "This card has withdrawals after this transaction. Delete anyway?",
+        )
+        return redirect(next_url)
     tx.delete()
     messages.success(request, "Transaction deleted.")
     return redirect(next_url)

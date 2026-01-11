@@ -509,7 +509,7 @@
           </td>
         <td data-label="Actions">
           <a href="/transactions/{{ t.id }}/edit/">Edit</a>
-          <form method="post" action="{% url 'transaction_delete' t.id %}" style="display:inline;" onsubmit="return confirm('Delete this transaction?');">
+          <form method="post" action="{% url 'transaction_delete' t.id %}" style="display:inline;" data-has-withdrawals="{% if t.has_withdrawals_after %}1{% else %}0{% endif %}" onsubmit="return confirmTransactionDelete(this);">
             {% csrf_token %}
             <input type="hidden" name="next" value="{{ request.get_full_path }}">
             <button type="submit" style="background:none;border:none;color:#c00;padding:0 0 0 8px;cursor:pointer;font:inherit;">Delete</button>
@@ -689,6 +689,24 @@
       exportLink.href = query ? `/transactions/export/?${query}` : "/transactions/export/";
     }
 
+    function confirmTransactionDelete(form) {
+      const hasWithdrawals = form.getAttribute("data-has-withdrawals") === "1";
+      const message = hasWithdrawals
+        ? "This card has withdrawals after this transaction. Delete anyway?"
+        : "Delete this transaction?";
+      const ok = window.confirm(message);
+      if (!ok) return false;
+      if (hasWithdrawals && !form.querySelector("input[name='confirm_withdrawals']")) {
+        const input = document.createElement("input");
+        input.type = "hidden";
+        input.name = "confirm_withdrawals";
+        input.value = "1";
+        form.appendChild(input);
+      }
+      return true;
+    }
+    window.confirmTransactionDelete = confirmTransactionDelete;
+
     function renderRows(items) {
       if (!items.length) {
         tbody.innerHTML = "<tr><td colspan=\"8\">No transactions match the search.</td></tr>";
@@ -721,7 +739,7 @@
                 </td>
               <td data-label="Actions">
                 <a href="/transactions/${id}/edit/">Edit</a>
-                <form method="post" action="/transactions/${id}/delete/" style="display:inline;" onsubmit="return confirm('Delete this transaction?');">
+                <form method="post" action="/transactions/${id}/delete/" style="display:inline;" data-has-withdrawals="${tx.has_withdrawals_after ? "1" : "0"}" onsubmit="return confirmTransactionDelete(this);">
                   <input type="hidden" name="csrfmiddlewaretoken" value="${csrf}">
                   <input type="hidden" name="next" value="${escapeHtml(nextValue)}">
                   <button type="submit" style="background:none;border:none;color:#c00;padding:0 0 0 8px;cursor:pointer;font:inherit;">Delete</button>
