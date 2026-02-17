@@ -145,6 +145,19 @@
     display: inline-flex;
     align-items: center;
   }
+  .withdraw-top-actions {
+    display: inline-flex;
+    align-items: flex-end;
+    justify-content: flex-end;
+    margin-left: auto;
+  }
+  .withdraw-search-toggle-row {
+    display: flex;
+    align-items: flex-end;
+    gap: 12px;
+    flex: 1 1 100%;
+    min-width: 0;
+  }
   .withdraw-balance-toggle .toggle-input {
     position: absolute;
     opacity: 0;
@@ -246,41 +259,59 @@
     background: #fffbeb;
     border-color: #fde68a;
   }
+  .withdraw-table tbody tr.withdraw-item[hidden] {
+    display: none !important;
+  }
   @media (max-width: 720px) {
     .withdraw-filters {
       display: grid !important;
       grid-template-columns: minmax(0, 1fr) auto;
+      grid-template-areas:
+        "workdate actions"
+        "searchrow searchrow";
       align-items: end;
+      gap: 10px 12px !important;
     }
     .withdraw-filters .withdraw-workdate {
-      grid-column: 1;
+      grid-area: workdate;
+      min-width: 0 !important;
+      width: 100%;
+    }
+    .withdraw-filters .withdraw-top-actions {
+      grid-area: actions;
+      display: inline-flex;
+      align-items: flex-end;
+      justify-content: flex-end;
     }
     .withdraw-filters .bank-search-row {
-      grid-column: 2;
-      display: flex;
-      gap: 6px;
-      justify-self: end;
+      display: none !important;
     }
     .withdraw-search-wrap {
-      grid-column: 1 / -1;
+      grid-area: auto;
+      min-width: 0 !important;
+      width: 100%;
+      display: flex !important;
+      flex: 1 1 auto;
+    }
+    .withdraw-search-toggle-row {
+      grid-area: searchrow;
+      display: flex;
+      align-items: flex-end;
+      gap: 10px;
+      width: 100%;
+      min-width: 0;
     }
     .withdraw-filters label {
       width: auto !important;
     }
-    .withdraw-search-wrap {
-      display: none !important;
-      width: 100%;
-    }
-    .withdraw-search-wrap.is-open {
-      display: flex !important;
-      flex: 1 1 100%;
+    .withdraw-balance-toggle {
+      grid-area: auto;
+      justify-self: end;
+      align-self: end;
+      flex: 0 0 auto;
     }
     .withdraw-search-toggle {
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      height: 44px;
-      width: 44px;
+      display: none !important;
     }
     .withdraw-table thead {
       display: none;
@@ -588,27 +619,25 @@
             <button type="button" class="calendar-toggle" aria-label="Open calendar">&#128197;</button>
           </div>
         </label>
-        <div class="bank-search-row">
-          <button type="button" class="withdraw-search-toggle" aria-label="Search">
-            <span class="icon-dot"></span>
-            <span class="icon-handle"></span>
+        <div class="withdraw-search-toggle-row">
+          <label class="withdraw-search-wrap" style="display:flex; flex-direction:column; min-width:220px; flex:1;">
+            <span>Search</span>
+            <input type="text" id="withdraw-search" placeholder="Search card/bank/pin..." value="{{ query }}" autocomplete="off">
+          </label>
+          <label class="withdraw-balance-toggle">
+            <input type="checkbox" id="hide-low-balance" class="toggle-input">
+            <span class="toggle-chip">Hide &lt; 1000</span>
+          </label>
+        </div>
+        <div class="withdraw-top-actions">
+          <button type="button" class="withdraw-filter-toggle" id="withdraw-filter-open" aria-label="Open filters" title="Filters">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M4 6h16"></path>
+              <path d="M7 12h10"></path>
+              <path d="M10 18h4"></path>
+            </svg>
           </button>
         </div>
-        <label class="withdraw-search-wrap" style="display:flex; flex-direction:column; min-width:220px; flex:1;">
-          <span>Search</span>
-          <input type="text" id="withdraw-search" placeholder="Search card/bank/pin..." value="{{ query }}" autocomplete="off">
-        </label>
-        <label class="withdraw-balance-toggle">
-          <input type="checkbox" id="hide-low-balance" class="toggle-input">
-          <span class="toggle-chip">Hide &lt; 1000</span>
-        </label>
-        <button type="button" class="withdraw-filter-toggle" id="withdraw-filter-open" aria-label="Open filters" title="Filters">
-          <svg viewBox="0 0 24 24" aria-hidden="true">
-            <path d="M4 6h16"></path>
-            <path d="M7 12h10"></path>
-            <path d="M10 18h4"></path>
-          </svg>
-        </button>
         <datalist id="withdraw-bank-options">
           {% for bank in banks %}
             <option data-id="{{ bank }}" value="{{ bank }}"></option>
@@ -1272,6 +1301,22 @@
 	}
 
 	  const hideLowBalanceToggle = document.getElementById("hide-low-balance");
+	  const hideLowBalanceWrap = document.querySelector(".withdraw-balance-toggle");
+	  const hideLowBalanceChip = document.querySelector(".withdraw-balance-toggle .toggle-chip");
+	  hideLowBalanceWrap?.addEventListener("click", (e) => {
+		if (e.target === hideLowBalanceToggle) return;
+		e.preventDefault();
+		if (!hideLowBalanceToggle) return;
+		hideLowBalanceToggle.checked = !hideLowBalanceToggle.checked;
+		refreshTotals();
+	  });
+	  hideLowBalanceChip?.addEventListener("click", (e) => {
+		e.stopPropagation();
+		e.preventDefault();
+		if (!hideLowBalanceToggle) return;
+		hideLowBalanceToggle.checked = !hideLowBalanceToggle.checked;
+		refreshTotals();
+	  });
 	  hideLowBalanceToggle?.addEventListener("change", () => {
 		refreshTotals();
 	  });
@@ -1279,7 +1324,7 @@
 	  function setUrlQuery(term) {
 		const params = new URLSearchParams();
 		const d = wd?.value || "";
-		const bank = bankHidden?.value || "";
+		const bank = (bankHidden?.value || bankInput?.value || "").trim();
 		const perPage = perPageSelect?.value || "";
 		if (d) params.set("date", d);
 		if (bank) params.set("bank", bank);
@@ -1293,11 +1338,30 @@
 	  function buildSearchParams(term) {
 		const params = new URLSearchParams();
 		const d = wd?.value || "";
-		const bank = bankHidden?.value || "";
+		const bank = (bankHidden?.value || bankInput?.value || "").trim();
 		if (d) params.set("date", d);
 		if (bank) params.set("bank", bank);
 		if (term) params.set("q", term);
 		return params;
+	  }
+
+	  function syncBankInputToHidden() {
+		if (!bankHidden || !bankInput) return;
+		const raw = bankInput.value.trim();
+		if (!raw) {
+		  bankHidden.value = "";
+		  return;
+		}
+		const lowerRaw = raw.toLowerCase();
+		const exact = bankOptions.find(opt => opt.label.toLowerCase() === lowerRaw);
+		const first = bankOptions.find(opt => opt.label.toLowerCase().includes(lowerRaw));
+		const chosen = exact || first;
+		if (chosen) {
+		  bankHidden.value = chosen.id || "";
+		  bankInput.value = chosen.label;
+		  return;
+		}
+		bankHidden.value = "";
 	  }
 
 	  function togglePagination(show) {
@@ -1418,21 +1482,24 @@
 		  .catch(() => {});
 	  }
 
-	  function navigateWithFilters() {
-		if (searchInput && searchInput.value.trim()) {
+	  function navigateWithFilters(forceNavigate = false) {
+		syncBankInputToHidden();
+		if (!forceNavigate && searchInput && searchInput.value.trim()) {
 		  applySearch();
 		  return;
 		}
 		const params = new URLSearchParams();
 		const d = wd?.value || "";
-		const bank = bankHidden?.value || "";
+		const bank = (bankHidden?.value || bankInput?.value || "").trim();
 		const perPage = perPageSelect?.value || "";
+		const q = searchInput?.value?.trim() || "";
 		if (d) params.set("date", d);
 		if (bank) params.set("bank", bank);
 		if (perPage) params.set("per_page", perPage);
+		if (q) params.set("q", q);
 		const url = `/withdraw/?${params.toString()}`;
 
-		if (inFlight > 0) {
+		if (!forceNavigate && inFlight > 0) {
 		  pendingNavUrl = url; // wait until saves finish
 		} else {
 		  window.location.href = url;
@@ -1440,8 +1507,9 @@
 	  }
 
 	  filterApplyBtn?.addEventListener("click", () => {
+		syncBankInputToHidden();
 		closeFilterDrawer();
-		navigateWithFilters();
+		navigateWithFilters(true);
 	  });
 
 	  if (wd) {
