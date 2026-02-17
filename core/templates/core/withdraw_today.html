@@ -9,7 +9,7 @@
     background: #fff !important;
     color: var(--text) !important;
     border-radius: 12px;
-    padding: 10px 12px;
+    padding: 0;
     cursor: pointer;
     font-weight: 600;
     position: relative;
@@ -17,6 +17,87 @@
     -webkit-appearance: none;
     appearance: none;
     box-shadow: none !important;
+    width: 44px;
+    height: 44px;
+  }
+  .withdraw-filter-toggle {
+    border: 1px solid var(--border);
+    background: #fff !important;
+    color: var(--text) !important;
+    border-radius: 12px;
+    padding: 0;
+    cursor: pointer;
+    font-weight: 600;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 44px;
+    height: 44px;
+    box-shadow: none !important;
+  }
+  .withdraw-filter-toggle svg {
+    width: 18px;
+    height: 18px;
+    stroke: currentColor;
+    stroke-width: 2;
+    fill: none;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+  }
+  .withdraw-filter-toggle:hover,
+  .withdraw-filter-toggle:focus {
+    border-color: var(--primary);
+    box-shadow: 0 0 0 3px rgba(0, 102, 255, 0.15);
+    outline: none;
+  }
+  .withdraw-filter-backdrop {
+    position: fixed;
+    inset: 0;
+    background: rgba(15, 23, 42, 0.45);
+    z-index: 80;
+    display: none;
+  }
+  .withdraw-filter-backdrop.is-open {
+    display: block;
+  }
+  .withdraw-filter-drawer {
+    position: fixed;
+    top: 0;
+    right: 0;
+    height: 100vh;
+    width: min(360px, 92vw);
+    background: #fff;
+    z-index: 81;
+    box-shadow: -12px 0 28px rgba(15, 23, 42, 0.2);
+    transform: translateX(100%);
+    transition: transform 0.2s ease;
+    display: flex;
+    flex-direction: column;
+    padding: 16px;
+    gap: 14px;
+  }
+  .withdraw-filter-drawer.is-open {
+    transform: translateX(0);
+  }
+  .withdraw-filter-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+  .withdraw-filter-close {
+    border: 1px solid var(--border);
+    background: #fff !important;
+    color: var(--text) !important;
+    border-radius: 10px;
+    padding: 6px 10px;
+    font-weight: 600;
+    cursor: pointer;
+  }
+  .withdraw-filter-actions {
+    margin-top: auto;
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
   }
   .withdraw-search-toggle:hover,
   .withdraw-search-toggle:focus,
@@ -57,6 +138,48 @@
   }
   .mobile-main {
     display: none;
+  }
+  .withdraw-balance-toggle {
+    align-self: flex-end;
+    height: 44px;
+    display: inline-flex;
+    align-items: center;
+  }
+  .withdraw-balance-toggle .toggle-input {
+    position: absolute;
+    opacity: 0;
+    width: 1px;
+    height: 1px;
+    pointer-events: none;
+  }
+  .withdraw-balance-toggle .toggle-chip {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    height: 40px;
+    padding: 0 14px;
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    background: #fff;
+    color: var(--text);
+    font-size: 0.92rem;
+    font-weight: 600;
+    white-space: nowrap;
+    cursor: pointer;
+    transition: background 0.2s ease, color 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
+  }
+  .withdraw-balance-toggle .toggle-chip:hover {
+    border-color: var(--primary);
+  }
+  .withdraw-balance-toggle .toggle-input:focus-visible + .toggle-chip {
+    outline: none;
+    border-color: var(--primary);
+    box-shadow: 0 0 0 3px rgba(0, 102, 255, 0.15);
+  }
+  .withdraw-balance-toggle .toggle-input:checked + .toggle-chip {
+    background: var(--primary);
+    border-color: var(--primary);
+    color: #fff;
   }
   .desktop-card-label {
     font-weight: 600;
@@ -126,29 +249,16 @@
   @media (max-width: 720px) {
     .withdraw-filters {
       display: grid !important;
-      grid-template-columns: minmax(0, 3fr) minmax(0, 1fr);
+      grid-template-columns: minmax(0, 1fr) auto;
       align-items: end;
     }
     .withdraw-filters .withdraw-workdate {
       grid-column: 1;
     }
-    .withdraw-filters .withdraw-per-page {
-      grid-column: 2;
-    }
-    .withdraw-per-page {
-      min-width: 0 !important;
-    }
     .withdraw-filters .bank-search-row {
-      grid-column: 1 / -1;
-      display: grid;
-      grid-template-columns: minmax(0, 4fr) minmax(0, 1fr);
+      grid-column: 2;
+      display: flex;
       gap: 6px;
-      align-items: end;
-    }
-    .withdraw-bank {
-      min-width: 0 !important;
-    }
-    .withdraw-search-toggle {
       justify-self: end;
     }
     .withdraw-search-wrap {
@@ -470,7 +580,7 @@
 <section class="section-card">
     <div style="display:flex; flex-direction:column; gap:12px;">
       <h2 style="margin:0;">Withdraw Today</h2>
-      <div class="filters-row withdraw-filters" style="display:flex; flex-wrap:wrap; gap:12px; width:100%;">
+      <div class="filters-row withdraw-filters" style="display:flex; flex-wrap:wrap; gap:12px; width:100%; align-items:flex-end;">
         <label class="withdraw-workdate" style="display:flex; flex-direction:column; min-width:160px;">
           <span>Work date</span>
           <div class="date-field">
@@ -478,23 +588,7 @@
             <button type="button" class="calendar-toggle" aria-label="Open calendar">&#128197;</button>
           </div>
         </label>
-        <label class="withdraw-per-page" style="display:flex; flex-direction:column; min-width:140px;">
-          <span>Per page</span>
-          <select id="withdraw-per-page">
-            {% for option in per_page_choices %}
-              <option value="{{ option }}" {% if option == per_page %}selected{% endif %}>{{ option }}</option>
-            {% endfor %}
-          </select>
-        </label>
         <div class="bank-search-row">
-          <label class="withdraw-bank" style="display:flex; flex-direction:column; min-width:220px;">
-            <span>Bank filter</span>
-            <div class="combo-wrapper">
-              <input type="hidden" id="bank-filter" value="{{ selected_bank }}">
-              <input type="text" id="bank-input" class="combo-input" data-combo-list="withdraw-bank-options" placeholder="Start typing bank..." value="{{ selected_bank }}" autocomplete="off" autocorrect="off" autocapitalize="none" spellcheck="false">
-              <div class="combo-dropdown"></div>
-            </div>
-          </label>
           <button type="button" class="withdraw-search-toggle" aria-label="Search">
             <span class="icon-dot"></span>
             <span class="icon-handle"></span>
@@ -504,6 +598,17 @@
           <span>Search</span>
           <input type="text" id="withdraw-search" placeholder="Search card/bank/pin..." value="{{ query }}" autocomplete="off">
         </label>
+        <label class="withdraw-balance-toggle">
+          <input type="checkbox" id="hide-low-balance" class="toggle-input">
+          <span class="toggle-chip">Hide &lt; 1000</span>
+        </label>
+        <button type="button" class="withdraw-filter-toggle" id="withdraw-filter-open" aria-label="Open filters" title="Filters">
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M4 6h16"></path>
+            <path d="M7 12h10"></path>
+            <path d="M10 18h4"></path>
+          </svg>
+        </button>
         <datalist id="withdraw-bank-options">
           {% for bank in banks %}
             <option data-id="{{ bank }}" value="{{ bank }}"></option>
@@ -513,6 +618,33 @@
     </div>
 
 	  {% csrf_token %}
+
+  <div class="withdraw-filter-backdrop" id="withdraw-filter-backdrop"></div>
+  <aside class="withdraw-filter-drawer" id="withdraw-filter-drawer" aria-hidden="true">
+    <div class="withdraw-filter-head">
+      <h3 style="margin:0;">Filters</h3>
+      <button type="button" class="withdraw-filter-close" id="withdraw-filter-close">Close</button>
+    </div>
+    <label class="withdraw-per-page" style="display:flex; flex-direction:column; min-width:140px;">
+      <span>Per page</span>
+      <select id="withdraw-per-page">
+        {% for option in per_page_choices %}
+          <option value="{{ option }}" {% if option == per_page %}selected{% endif %}>{{ option }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <label class="withdraw-bank" style="display:flex; flex-direction:column; min-width:220px;">
+      <span>Bank filter</span>
+      <div class="combo-wrapper">
+        <input type="hidden" id="bank-filter" value="{{ selected_bank }}">
+        <input type="text" id="bank-input" class="combo-input" data-combo-list="withdraw-bank-options" placeholder="Start typing bank..." value="{{ selected_bank }}" autocomplete="off" autocorrect="off" autocapitalize="none" spellcheck="false">
+        <div class="combo-dropdown"></div>
+      </div>
+    </label>
+    <div class="withdraw-filter-actions">
+      <button type="button" id="withdraw-filter-apply">Apply</button>
+    </div>
+  </aside>
 
   <div class="table-card table-scroll" style="margin-top:16px;">
 	  <table class="withdraw-table">
@@ -772,8 +904,12 @@
 
 	  function refreshTotals() {
 		const totals = { should: 0, withdrawn: 0, commission: 0, remaining: 0 };
+		const hideLowBalances = Boolean(document.getElementById("hide-low-balance")?.checked);
+		const lowBalanceThreshold = 1000;
 		document.querySelectorAll("tr[data-card-id]").forEach(row => {
 		  const state = computeRowState(row);
+		  row.hidden = hideLowBalances && state.remaining < lowBalanceThreshold;
+		  if (row.hidden) return;
 		  totals.should += state.should;
 		  totals.withdrawn += state.withdrawn;
 		  totals.commission += state.commission;
@@ -1078,8 +1214,13 @@
 	  const searchInput = document.getElementById("withdraw-search");
 	  const searchToggle = document.querySelector(".withdraw-search-toggle");
 	  const searchWrap = document.querySelector(".withdraw-search-wrap");
+	  const filterDrawer = document.getElementById("withdraw-filter-drawer");
+	  const filterBackdrop = document.getElementById("withdraw-filter-backdrop");
+	  const filterOpenBtn = document.getElementById("withdraw-filter-open");
+	  const filterCloseBtn = document.getElementById("withdraw-filter-close");
+	  const filterApplyBtn = document.getElementById("withdraw-filter-apply");
 	  const perPageSelect = document.getElementById("withdraw-per-page");
-	  const perPageLabel = document.querySelector(".withdraw-per-page");
+	  const perPageLabel = document.querySelector(".withdraw-per-page-inline");
 	  const tbody = document.querySelector(".table-card table tbody");
 	  const pagination = document.querySelector(".pagination");
 	  const initialBody = tbody ? tbody.innerHTML : "";
@@ -1092,6 +1233,27 @@
 		id: opt.dataset.id || opt.value,
 		label: opt.value
 	  }));
+
+	  function openFilterDrawer() {
+		filterDrawer?.classList.add("is-open");
+		filterBackdrop?.classList.add("is-open");
+		filterDrawer?.setAttribute("aria-hidden", "false");
+	  }
+
+	  function closeFilterDrawer() {
+		filterDrawer?.classList.remove("is-open");
+		filterBackdrop?.classList.remove("is-open");
+		filterDrawer?.setAttribute("aria-hidden", "true");
+	  }
+
+	  filterOpenBtn?.addEventListener("click", openFilterDrawer);
+	  filterCloseBtn?.addEventListener("click", closeFilterDrawer);
+	  filterBackdrop?.addEventListener("click", closeFilterDrawer);
+	  document.addEventListener("keydown", (event) => {
+		if (event.key === "Escape") {
+		  closeFilterDrawer();
+		}
+	  });
 
 	if (searchToggle && searchWrap) {
 	  if (searchInput && searchInput.value.trim()) {
@@ -1108,6 +1270,11 @@
 		}
 	  });
 	}
+
+	  const hideLowBalanceToggle = document.getElementById("hide-low-balance");
+	  hideLowBalanceToggle?.addEventListener("change", () => {
+		refreshTotals();
+	  });
 
 	  function setUrlQuery(term) {
 		const params = new URLSearchParams();
@@ -1272,11 +1439,13 @@
 		}
 	  }
 
+	  filterApplyBtn?.addEventListener("click", () => {
+		closeFilterDrawer();
+		navigateWithFilters();
+	  });
+
 	  if (wd) {
 		wd.addEventListener("change", navigateWithFilters);
-	  }
-	  if (perPageSelect) {
-		perPageSelect.addEventListener("change", navigateWithFilters);
 	  }
 	  if (searchInput) {
 		searchInput.addEventListener("keydown", (e) => {
@@ -1314,7 +1483,6 @@
 		  bankHidden.value = opt.id || "";
 		  bankInput.value = opt.label;
 		  bankDropdown.style.display = "none";
-		  navigateWithFilters();
 		};
 
 		const updateDropdown = term => {
@@ -1348,7 +1516,6 @@
 		  bankHidden.value = "";
 		  if (bankInput.value.trim() === "") {
 			bankDropdown.style.display = "none";
-			navigateWithFilters();
 		  } else {
 			updateDropdown(bankInput.value);
 		  }
@@ -1382,7 +1549,6 @@
 			  applySelection(match);
 			} else if (bankInput.value.trim() === "") {
 			  bankHidden.value = "";
-			  navigateWithFilters();
 			} else {
 			  bankInput.value = bankHidden.value;
 			}
