@@ -23,3 +23,16 @@ staticfiles/
 venv/
 .venv/
 env/
+
+# Local production secrets
+.env
+.env.*
+!.env.example
+
+# Local database dumps
+*.sql
+*.dump
+*.backup
+
+# Runtime/build output
+staticfiles/

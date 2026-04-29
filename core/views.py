@@ -100,6 +100,78 @@ def _withdrawal_actual_amount(wd, cache=None):
         return cache[key]
     return wd.withdrawn_rub or Decimal("0")
 
+
+def _tx_day(tx):
+    return timezone.localtime(tx.timestamp).date() if timezone.is_aware(tx.timestamp) else tx.timestamp.date()
+
+
+def _precompute_full_withdrawal_amounts(withdrawals):
+    full_keys = {(wd.card_id, wd.date) for wd in withdrawals if wd.fully_withdrawn}
+    if not full_keys:
+        return {}
+
+    card_ids = {card_id for card_id, _ in full_keys}
+    max_day = max(day for _, day in full_keys)
+
+    full_dates = defaultdict(list)
+    for wd in Withdrawal.objects.filter(
+        card_id__in=card_ids,
+        fully_withdrawn=True,
+        date__lt=max_day + timedelta(days=1),
+    ).only("card_id", "date"):
+        full_dates[wd.card_id].append(wd.date)
+    for dates in full_dates.values():
+        dates.sort()
+
+    tx_by_card = defaultdict(list)
+    for tx in Transaction.objects.filter(
+        card_id__in=card_ids,
+        timestamp__date__lte=max_day,
+    ).only("card_id", "timestamp", "amount_rub"):
+        tx_by_card[tx.card_id].append((_tx_day(tx), tx.amount_rub or Decimal("0")))
+
+    partial_wd_by_card = defaultdict(list)
+    for wd in Withdrawal.objects.filter(
+        card_id__in=card_ids,
+        fully_withdrawn=False,
+        date__lt=max_day + timedelta(days=1),
+    ).only("card_id", "date", "withdrawn_rub", "commission_rub"):
+        partial_wd_by_card[wd.card_id].append(
+            (
+                wd.date,
+                wd.withdrawn_rub or Decimal("0"),
+                wd.commission_rub or Decimal("0"),
+            )
+        )
+
+    amounts = {}
+    for card_id, day in full_keys:
+        last_full = None
+        for full_day in full_dates.get(card_id, []):
+            if full_day < day:
+                last_full = full_day
+            else:
+                break
+        start_day = last_full + timedelta(days=1) if last_full else None
+
+        received = sum(
+            amount
+            for tx_day, amount in tx_by_card.get(card_id, [])
+            if tx_day <= day and (start_day is None or tx_day >= start_day)
+        )
+        withdrawn = Decimal("0")
+        commission = Decimal("0")
+        for wd_day, wd_amount, wd_commission in partial_wd_by_card.get(card_id, []):
+            if wd_day < day and (start_day is None or wd_day >= start_day):
+                withdrawn += wd_amount
+                commission += wd_commission
+
+        amount = received - withdrawn - commission
+        amounts[(card_id, day)] = amount if amount > 0 else Decimal("0")
+
+    return amounts
+
+
 def _closing_before(card: Card, day: date) -> Decimal:
     """
     Remaining balance carried into 'day' = total received since the last
@@ -253,12 +325,14 @@ def _cards_with_totals(cards, start_date=None, end_date=None):
     }
 
     withdraw_map = defaultdict(lambda: {"amount": Decimal("0"), "commission": Decimal("0")})
-    cache = {}
     withdrawals = _dedupe_withdrawals_by_date(
         Withdrawal.objects.filter(**wd_filter).select_related("card")
     )
+    full_amounts = _precompute_full_withdrawal_amounts(withdrawals)
     for wd in withdrawals:
-        actual = _withdrawal_actual_amount(wd, cache)
+        actual = full_amounts.get((wd.card_id, wd.date)) if wd.fully_withdrawn else None
+        if actual is None:
+            actual = wd.withdrawn_rub or Decimal("0")
         withdraw_map[wd.card_id]["amount"] += actual
         withdraw_map[wd.card_id]["commission"] += wd.commission_rub or Decimal("0")
 
@@ -290,17 +364,68 @@ def _withdraw_rows_for_day(day):
     rows = []
     banks = []
     bank_colors = _bank_color_map()
-    for card in Card.objects.filter(status="active").order_by("name"):
-        carry_in = _closing_before(card, day)
-        received = _received_today(card, day)
+    cards = list(Card.objects.filter(status="active").order_by("name"))
+    card_ids = [card.id for card in cards]
+
+    last_full_by_card = {
+        row["card_id"]: row["last_full"]
+        for row in Withdrawal.objects.filter(
+            card_id__in=card_ids,
+            date__lt=day,
+            fully_withdrawn=True,
+        )
+        .values("card_id")
+        .annotate(last_full=Max("date"))
+    }
+
+    received_before = defaultdict(Decimal)
+    received_before_last_full = defaultdict(Decimal)
+    received_today = defaultdict(Decimal)
+    for tx in Transaction.objects.filter(
+        card_id__in=card_ids,
+        timestamp__date__lte=day,
+    ).only("card_id", "timestamp", "amount_rub"):
+        tx_date = _tx_day(tx)
+        amount = tx.amount_rub or Decimal("0")
+        if tx_date == day:
+            received_today[tx.card_id] += amount
+        elif tx_date < day:
+            received_before[tx.card_id] += amount
+            last_full = last_full_by_card.get(tx.card_id)
+            if last_full and tx_date <= last_full:
+                received_before_last_full[tx.card_id] += amount
+
+    partial_withdrawn_before = defaultdict(Decimal)
+    partial_commission_before = defaultdict(Decimal)
+    for wd in Withdrawal.objects.filter(
+        card_id__in=card_ids,
+        date__lt=day,
+        fully_withdrawn=False,
+    ).only("card_id", "date", "withdrawn_rub", "commission_rub"):
+        last_full = last_full_by_card.get(wd.card_id)
+        if last_full and wd.date <= last_full:
+            continue
+        partial_withdrawn_before[wd.card_id] += wd.withdrawn_rub or Decimal("0")
+        partial_commission_before[wd.card_id] += wd.commission_rub or Decimal("0")
+
+    latest_withdrawal_today = {}
+    for wd in Withdrawal.objects.filter(date=day, card_id__in=card_ids).order_by("-timestamp", "-id"):
+        latest_withdrawal_today.setdefault(wd.card_id, wd)
+
+    for card in cards:
+        carry_in = (
+            received_before[card.id]
+            - received_before_last_full[card.id]
+            - partial_withdrawn_before[card.id]
+            - partial_commission_before[card.id]
+        )
+        if carry_in < 0:
+            carry_in = Decimal("0")
+        received = received_today[card.id]
         should = carry_in + received
 
         if should > 0:
-            wd = (
-                Withdrawal.objects.filter(date=day, card=card)
-                .order_by("-timestamp", "-id")
-                .first()
-            )
+            wd = latest_withdrawal_today.get(card.id)
 
             last4 = card.card_number[-4:] if card.card_number and len(card.card_number) >= 4 else ""
             card_label = f"{card.name} *{last4}" if last4 else card.name
@@ -352,23 +477,23 @@ def _payments_rows(start_date=None, end_date=None, query=None):
     if query:
         txs = txs.filter(client__name__icontains=query)
 
-    summary = defaultdict(lambda: {"rub": Decimal("0"), "usd": Decimal("0")})
+    summary = defaultdict(lambda: {"rub": Decimal("0"), "usd": Decimal("0"), "client": None})
     for tx in txs:
-        key = (tx.timestamp.date(), tx.client_id)
+        key = (_tx_day(tx), tx.client_id)
         summary[key]["rub"] += tx.amount_rub or Decimal("0")
         summary[key]["usd"] += tx.amount_usd or Decimal("0")
+        summary[key]["client"] = tx.client
 
-    client_cache = {}
-    rows = []
-    for (day, client_id), totals in summary.items():
-        client = client_cache.setdefault(client_id, Client.objects.get(pk=client_id))
-        rows.append({
+    rows = [
+        {
             "date": day,
-            "client": client,
+            "client": totals["client"],
             "rub": totals["rub"],
             "usd": totals["usd"],
-        })
-    rows.sort(key=lambda r: (r["date"], r["client"].name), reverse=True)
+        }
+        for (day, _client_id), totals in summary.items()
+    ]
+    rows.sort(key=lambda r: (r["date"], r["client"].name if r["client"] else ""), reverse=True)
     return rows
 
 
